@@ -1,0 +1,39 @@
+{
+    "name": "mssqldriver",
+    "version": "0.0.1",
+    "description": "Driver for MS SQL Server, based on tediousjs",
+    "main": "index.js",
+    "scripts": {
+        "test": "node ./dist/test/index.js",
+        "update": "npx npm-check-updates -u && npm i && npm audit fix && node ./node_modules/vv-template-nodebackend/index.js",
+        "build": "tsc",
+        "precommit": "node ./.auto/precommit.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/VasilevVitalii/mssqldriver.git"
+    },
+    "author": "Vitalii Vasilev",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/VasilevVitalii/mssqldriver/issues"
+    },
+    "homepage": "https://github.com/VasilevVitalii/mssqldriver#readme",
+    "devDependencies": {
+        "@types/node": "16.11.2",
+        "@types/tedious": "^4.0.5",
+        "@typescript-eslint/eslint-plugin": "5.1.0",
+        "@typescript-eslint/parser": "5.1.0",
+        "eslint": "8.0.1",
+        "npm-check-updates": "11.8.5",
+        "prettier": "2.4.1",
+        "ts-node": "10.3.1",
+        "typescript": "4.4.4",
+        "vv-template-nodebackend": "0.0.11"
+    },
+    "dependencies": {
+        "mssqlcoop": "0.0.1",
+        "tedious": "^14.0.0",
+        "vv-common": "0.0.3"
+    }
+}
