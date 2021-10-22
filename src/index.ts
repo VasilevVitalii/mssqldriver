@@ -1,9 +1,10 @@
 import { OptionsBeautify, OptionsTds } from "./optionsBuild"
 import { ConnectionConfig } from 'tedious'
+import { Run, TBatchOptions } from "./executor"
 
 export type TConnection =
-    { type: 'mixed', instance: string, login: string, password: string, additional: TConnectionAdditional } |
-    { type: 'domain', instance: string, additional: TConnectionAdditional }
+    { type: 'mixed', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
+    { type: 'domain', instance: string, additional?: TConnectionAdditional }
 
 export type TConnectionAdditional = {
     /**name database for connect, default - 'tempdb'*/
@@ -23,10 +24,22 @@ export type TConnectionAdditional = {
 }
 
 export interface IApp {
-    aa: string
+    run: (query: string | string[], options?: TBatchOptions) => void
+    exec: (query: string | string[], options?: TBatchOptions) => void
 }
 
-export function Create(options: TConnection) {
+export function Create(options: TConnection): IApp {
     const opt = OptionsBeautify(options)
     const optTds = OptionsTds(opt)
+
+    //Exec(optTds, undefined, "select 42, 'hello world'")
+
+    return {
+        run(query: string | string[], options?: TBatchOptions) {
+            Run(optTds, options, query)
+        },
+        exec(query: string | string[], options?: TBatchOptions) {
+            //Exec(optTds, options, query)
+        },
+    }
 }

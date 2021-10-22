@@ -2,6 +2,7 @@ import os from 'os'
 import tds from 'tedious'
 import vv from 'vv-common'
 import { TConnection, TConnectionAdditional } from ".";
+import { TBatchOptions } from './executor';
 
 export function OptionsBeautify(optionsRaw: TConnection): TConnection {
     if (!optionsRaw) return undefined
@@ -38,7 +39,7 @@ export function OptionsTds(options: TConnection): tds.ConnectionConfig {
     const serverTds = server.length > 0 ? server.shift() : undefined
 
     let portTds = undefined
-    const portTdsIndx = server[server.length - 1].lastIndexOf(',')
+    const portTdsIndx = server.length > 0 ? server[server.length - 1].lastIndexOf(',') : -1
     if (server.length > 0 && portTdsIndx > 0) {
         portTds = vv.nz(vv.toInt(server[server.length - 1].substring(portTdsIndx).trim()), -1)
         server[server.length - 1] = server[server.length - 1].substring(0, portTdsIndx).trim()
