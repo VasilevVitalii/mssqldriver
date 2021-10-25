@@ -1,10 +1,10 @@
 import { OptionsBeautify, OptionsTds } from "./optionsBuild"
 import { ConnectionConfig } from 'tedious'
-import { Run, TBatchOptions } from "./executor"
+import { Exec, TBatchOptions } from "./executor"
 
 export type TConnection =
-    { type: 'mixed', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
-    { type: 'domain', instance: string, additional?: TConnectionAdditional }
+    { authentication: 'sqlserver', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
+    { authentication: 'windows', instance: string, additional?: TConnectionAdditional }
 
 export type TConnectionAdditional = {
     /**name database for connect, default - 'tempdb'*/
@@ -24,7 +24,7 @@ export type TConnectionAdditional = {
 }
 
 export interface IApp {
-    run: (query: string | string[], options?: TBatchOptions) => void
+    //run: (query: string | string[], options?: TBatchOptions) => void
     exec: (query: string | string[], options?: TBatchOptions) => void
 }
 
@@ -35,11 +35,11 @@ export function Create(options: TConnection): IApp {
     //Exec(optTds, undefined, "select 42, 'hello world'")
 
     return {
-        run(query: string | string[], options?: TBatchOptions) {
-            Run(optTds, options, query)
-        },
+        // run(query: string | string[], options?: TBatchOptions) {
+        //     Run(optTds, options, query)
+        // },
         exec(query: string | string[], options?: TBatchOptions) {
-            //Exec(optTds, options, query)
+            Exec(optTds, options, query)
         },
     }
 }

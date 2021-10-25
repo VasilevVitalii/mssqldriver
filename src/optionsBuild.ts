@@ -15,15 +15,15 @@ export function OptionsBeautify(optionsRaw: TConnection): TConnection {
         executionTimeout: optionsRaw.additional?.executionTimeout || 0,
         canInstanceToIp: optionsRaw.additional?.canInstanceToIp === false ? false : true
     } as TConnectionAdditional
-    if (optionsRaw.type === 'domain') {
+    if (optionsRaw.authentication === 'windows') {
         return {
-            type: 'domain',
+            authentication: 'windows',
             instance: optionsRaw?.instance || '',
             additional: additional
         }
-    } else if (optionsRaw.type === 'mixed') {
+    } else if (optionsRaw.authentication === 'sqlserver') {
         return {
-            type: 'mixed',
+            authentication: 'sqlserver',
             instance: optionsRaw?.instance || '',
             login: optionsRaw.login || 'sa',
             password: optionsRaw.password,
@@ -50,11 +50,11 @@ export function OptionsTds(options: TConnection): tds.ConnectionConfig {
     return {
         server: serverTds,
         authentication: {
-            type: options.type === 'mixed' ? 'default' : 'ntlm',
+            type: options.authentication === 'sqlserver' ? 'default' : 'ntlm',
             options: {
-                userName: options.type === 'mixed' ? options.login : os.userInfo().username,
-                password: options.type === 'mixed' ? options.password : '',
-                domain: options.type === 'mixed' ? '' : os.hostname().toUpperCase(),
+                userName: options.authentication === 'sqlserver' ? options.login : os.userInfo().username,
+                password: options.authentication === 'sqlserver' ? options.password : '',
+                domain: options.authentication === 'sqlserver' ? '' : os.hostname().toUpperCase(),
             }
         },
         options: {

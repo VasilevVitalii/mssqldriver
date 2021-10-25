@@ -4,13 +4,17 @@ import * as mssqldriver from '../src'
 
 
 const mssql = mssqldriver.Create({
-    type: 'mixed',
-    instance: 'odin\\run2010',
+    authentication: 'sqlserver',
+    instance: '192.168.201.220',
     login: 'sa',
-    password: '123Qazws'
+    password: '333666999'
 })
 
 const query1 = [
+    `IF OBJECT_ID('tempdb..#i') IS NOT NULL DROP TABLE #i`,
+    `CREATE TABLE #i(g UNIQUEIDENTIFIER NOT NULL, i INT NOT NULL, n NVARCHAR(50), FDM DATETIME, PRIMARY KEY(g, i))`,
+    `INSERT INTO #I(g, i, n, FDM) SELECT NEWID(), 42, NULL, GETDATE()`,
+    `SELECT *, 'hi', 1 f1, 2 f1 FROM #i`,
     `SELECT * FROM sys.objects`,
     `DECLARE @i INT, @m NVARCHAR(MAX)`,
     `SET @i = 0`,
@@ -25,4 +29,4 @@ const query1 = [
     `SELECT * FROM sys.objects`,
 ].join('\n')
 
-mssql.run(query1)
+mssql.exec(query1)
