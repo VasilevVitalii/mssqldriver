@@ -1,6 +1,6 @@
 import { OptionsBeautify, OptionsTds } from "./optionsBuild"
 import { ConnectionConfig } from 'tedious'
-import { Exec, TBatchOptions } from "./executor"
+import { Exec, TBatchOptions, TExecResult } from "./executor"
 
 export type TConnection =
     { authentication: 'sqlserver', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
@@ -25,7 +25,7 @@ export type TConnectionAdditional = {
 
 export interface IApp {
     //run: (query: string | string[], options?: TBatchOptions) => void
-    exec: (query: string | string[], options?: TBatchOptions) => void
+    exec: (query: string | string[], options: TBatchOptions, callback: (result: TExecResult) => void) => void
 }
 
 export function Create(options: TConnection): IApp {
@@ -38,8 +38,8 @@ export function Create(options: TConnection): IApp {
         // run(query: string | string[], options?: TBatchOptions) {
         //     Run(optTds, options, query)
         // },
-        exec(query: string | string[], options?: TBatchOptions) {
-            Exec(optTds, options, query)
+        exec(query: string | string[], options: TBatchOptions, callback: (result: TExecResult) => void) {
+            Exec(optTds, options, query, callback)
         },
     }
 }

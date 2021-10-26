@@ -1,6 +1,6 @@
 import { ConnectionConfig, Connection, Request } from 'tedious'
 import * as vv from 'vv-common'
-import mssqlcoop from 'mssqlcoop'
+import * as mssqlcoop from 'mssqlcoop'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 //const tds = require('tedious')
 
@@ -10,13 +10,16 @@ export type TBatchOptionsLock = {
     database: string
 }
 
+// none | directly | cumulative
+// none | 500 | cumulative
+
 export type TBatchOptions = {
     /** use this database before start query, default - undefined (use database from connection)*/
     database?: string,
-    /**catch and return tables from queries, default - true*/
-    allowTables?: boolean,
-    /**catch and return messages from queries, default - true*/
-    allowMessages?: boolean,
+    /**where return tables - 'none' - never, number - chunked return each this msec value, 'cumulative' - in end result object; default - 'cumulative'*/
+    receiveTables?: ('none' | number | 'cumulative'),
+    /**where return messages - 'none' - never, 'directly' - each message return immediately, 'cumulative' - in end result object; default - 'cumulative'*/
+    receiveMessage?: ('none' | 'directly' | 'cumulative'),
     /**get spid, for (example) kill process, default - false */
     hasSpid?: boolean,
     /**protect competitive exec query, based on sp_getapplock*/
@@ -37,38 +40,31 @@ type TQuery = {
 type TRequest =
     { kind: 'before.exec', query: TQuery } |
     { kind: 'after.exec', query: TQuery } |
+    { kind: 'spid', spid: number } |
     { kind: 'columns', columns: TColumnInternal[] } |
     { kind: 'stop' }
 
 type TColumnInternal = {
+    originName: string,
     name: string,
+    type: string,
+    precision: number,
+    scale: number,
+    len: number,
     isNullable: boolean,
     isIdentity: boolean,
     isReadOnly: boolean,
 }
 
-export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[]) {
+export type TExecResult =
+    { kind: 'spid', spid: number }
+
+export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
     const conn = connection(optionsTds, optionsBatch)
-    // const q = queries(conn.optionsBatch, query)
-
-    // const request = new Request("select 42, 'hello world'", error => {
-    //     if (error) {
-    //         console.log(error)
-    //     }
-    //     conn.close()
-    //     conn = undefined
-    // })
-
-    // request.on('row', function(row) {
-    //     console.log(row)
-    // })
-    // request.on('columnMetadata', function(columns) {
-    //     console.log(columns)
-    // })
 
     let currentQuery = undefined as TQuery
 
-    if (conn.optionsBatch.allowMessages) {
+    if (conn.optionsBatch.receiveMessage !== 'none') {
         conn.connection.on('infoMessage', message => {
             if (currentQuery?.kind !== 'query') return
             console.log(message)
@@ -85,13 +81,11 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
             return
         }
         request(conn.connection, conn.optionsBatch, queries(conn.optionsBatch, query), 0, requestStep => {
-            if (requestStep.kind === 'before.exec') {
+            if (requestStep.kind === 'spid') {
+                callback({kind: 'spid', spid: requestStep.spid})
+            } else if (requestStep.kind === 'before.exec') {
                 currentQuery = requestStep.query
             } else if (requestStep.kind === 'columns') {
-
-                //noname_i
-                //xxxx_copy_i
-
                 console.log(requestStep.columns)
             } else if (requestStep.kind === 'stop') {
                 conn.connection.close()
@@ -121,18 +115,52 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         idx++
         request(connection, optionsBatch, queries, idx, callback)
     })
-    if (optionsBatch.allowTables) {
-        req.on('columnMetadata', function(columns) {
-            callback({kind: 'columns', columns: columns.map(m => {
+    if (query.kind === 'spid') {
+        req.on('row', function(row) {
+            if (row && row.length > 0 && row[0].value) {
+                const spid = vv.toInt(row[0].value)
+                callback({kind: 'spid', spid: spid})
+            }
+        })
+    } else if (optionsBatch.receiveTables !== 'none') {
+        req.on('columnMetadata', function(columnsRaw) {
+            const columns = columnsRaw.map(m => {
                 const flags = m['flags']
+                const type = (m.type?.name || '').toLowerCase()
+                let dataLength = m.dataLength
+                if (dataLength) {
+                    const fnd = mssqlcoop.Types.find(f => f.name === type && f.bytesOnChar)
+                    if (fnd) {
+                        dataLength = Math.floor(dataLength / fnd.bytesOnChar)
+                    }
+                }
+
                 return {
+                    originName: m.colName,
                     name: m.colName,
+                    type: type,
+                    precision: m.precision,
+                    scale: m.scale,
+                    len: dataLength,
                     isNullable: !!(flags & 0x01),
                     isIdentity: !!(flags & 0x10),
                     isReadOnly: !!(flags & 0x0C),
+                } as TColumnInternal
+            })
+            columns.filter(f => vv.isEmpty(f.name)).forEach(c => { c.name = 'noname' })
+            let idxCopy = 1
+            for (let i = 0; i < columns.length; i++) {
+                for (let j = i + 1; j < columns.length; j++) {
+                    if (columns[i].name.toLowerCase() !== columns[j].name.toLowerCase()) continue
+                    let maybeName = `${columns[i].name}_copy_${idxCopy}`
+                    while (columns.some(f => vv.equal(f.name, maybeName))) {
+                        idxCopy++
+                        maybeName = `${columns[i].name}_copy_${idxCopy}`
+                    }
+                    columns[j].name = maybeName
                 }
-            })})
-            console.log(columns)
+            }
+            callback({kind: 'columns', columns: columns})
         })
         req.on('row', function(row) {
             console.log(row)
@@ -155,8 +183,8 @@ function connection(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions) :
         connection: new Connection({...optionsTds, options: {...optionsTds.options, database: database}}),
         optionsBatch: {
             database: database,
-            allowTables: optionsBatch && optionsBatch.allowTables === false ? false : true,
-            allowMessages: optionsBatch && optionsBatch.allowMessages === false ? false : true,
+            receiveTables: optionsBatch?.receiveTables || 'cumulative',
+            receiveMessage: optionsBatch?.receiveMessage || 'cumulative',
             hasSpid: optionsBatch && optionsBatch.hasSpid === true ? true : false,
             lock: lock,
             isStopOnError: optionsBatch && optionsBatch.isStopOnError === false ? false : true,
