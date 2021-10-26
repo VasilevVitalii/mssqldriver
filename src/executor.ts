@@ -24,8 +24,6 @@ export type TBatchOptions = {
     hasSpid?: boolean,
     /**protect competitive exec query, based on sp_getapplock*/
     lock?: TBatchOptionsLock,
-    /**for exec many queries in one batch - if in step error exists, next steps not run, default - true */
-    isStopOnError?: boolean
     /** for allowTables = true: convert null in cell to undefined, default - true */
     isNullToUndefined?: boolean
 }
@@ -57,7 +55,8 @@ type TColumnInternal = {
 }
 
 export type TExecResult =
-    { kind: 'spid', spid: number }
+    { kind: 'spid', spid: number } |
+    { kind: 'finish', finish: {error: Error } }
 
 export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
     const conn = connection(optionsTds, optionsBatch)
@@ -77,7 +76,14 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
 
     conn.connection.connect(error => {
         if (error) {
-            console.log(error)
+            conn.connection = undefined
+            error['point'] = 'CONNECT'
+            callback({
+                kind: 'finish',
+                finish: {
+                    error: error
+                }
+            })
             return
         }
         request(conn.connection, conn.optionsBatch, queries(conn.optionsBatch, query), 0, requestStep => {
@@ -90,6 +96,12 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
             } else if (requestStep.kind === 'stop') {
                 conn.connection.close()
                 conn.connection = undefined
+                callback({
+                    kind: 'finish',
+                    finish: {
+                        error: currentQuery?.error
+                    }
+                })
             }
         })
     })
@@ -106,10 +118,8 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         query.isExecuted = true
         if (error) {
             query.error = error
-            if (optionsBatch.isStopOnError) {
-                callback({kind: 'stop'})
-                return
-            }
+            callback({kind: 'stop'})
+            return
         }
         callback({kind: 'after.exec', query: query})
         idx++
@@ -134,7 +144,6 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
                         dataLength = Math.floor(dataLength / fnd.bytesOnChar)
                     }
                 }
-
                 return {
                     originName: m.colName,
                     name: m.colName,
@@ -187,7 +196,6 @@ function connection(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions) :
             receiveMessage: optionsBatch?.receiveMessage || 'cumulative',
             hasSpid: optionsBatch && optionsBatch.hasSpid === true ? true : false,
             lock: lock,
-            isStopOnError: optionsBatch && optionsBatch.isStopOnError === false ? false : true,
             isNullToUndefined: optionsBatch && optionsBatch.isNullToUndefined === false ? false : true,
         }
     }

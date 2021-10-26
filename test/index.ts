@@ -19,12 +19,42 @@ const mssql = mssqldriver.Create({
     authentication: 'sqlserver',
     instance: connection.authentication,
     login: connection.login,
-    password: connection.password
+    password: connection.password,
+    additional: {
+        connectionTimeout: 3000
+    }
+})
+
+const customTest1 = {error: undefined as Error, point: undefined as string}
+const customTest2 = {error: undefined as Error, spid: 0, finished: false}
+
+const mssqlBad = mssqldriver.Create({
+    authentication: 'sqlserver',
+    instance: 'aaa',
+    login: 'bbb',
+    password: 'ccc',
+    additional: {
+        connectionTimeout: 3000
+    }
+})
+mssqlBad.exec('SELECT 1', undefined, execResult => {
+    if (execResult?.kind === 'finish') {
+        if (execResult && execResult.finish && execResult.finish.error) {
+            customTest1.error = execResult.finish.error
+            customTest1.point = execResult.finish.error['point']
+        }
+    }
 })
 
 mssql.exec(`PRINT 'HI'`, {hasSpid: true}, execResult => {
-    //const execResult
+    if (execResult.kind === 'spid') {
+        customTest2.spid = execResult.spid
+    } else if (execResult.kind === 'finish') {
+        customTest2.error = execResult.finish.error
+        customTest2.finished = true
+    }
 })
+
 
 // types.TestTypes(mssql, 0, () => {
 

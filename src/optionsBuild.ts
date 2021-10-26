@@ -2,7 +2,6 @@ import os from 'os'
 import tds from 'tedious'
 import vv from 'vv-common'
 import { TConnection, TConnectionAdditional } from ".";
-import { TBatchOptions } from './executor';
 
 export function OptionsBeautify(optionsRaw: TConnection): TConnection {
     if (!optionsRaw) return undefined
@@ -48,7 +47,7 @@ export function OptionsTds(options: TConnection): tds.ConnectionConfig {
     const instanceNameTds = server.length > 0 ? server.join('/') : undefined
 
     return {
-        server: serverTds,
+        server: serverTds === '.' || serverTds === '(local)' ? 'localhost' : serverTds,
         authentication: {
             type: options.authentication === 'sqlserver' ? 'default' : 'ntlm',
             options: {
