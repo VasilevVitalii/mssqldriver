@@ -9,7 +9,7 @@ type TTestType = {
 }
 
 const testTypes = [
-    {type: 'bigint', checks: [{ins: undefined, res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]}
+    {type: 'bigint', checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]}
 ] as TTestType[]
 
 
@@ -19,8 +19,9 @@ function script (t: TTestType): string {
         `CREATE TABLE #t(__i INT IDENTITY(1,1), f ${t.customDeclare ? t.customDeclare : t.type.toUpperCase()})`,
     ] as string[]
     t.checks.forEach(c => {
-        `INSERT INTO #t(f) VALUES (${c.ins})`
+        res.push(`INSERT INTO #t(f) VALUES (${c.ins})`)
     })
+    res.push('SELECT * FROM #t ORDER BY __i')
     return res.join('\n')
 }
 
@@ -32,6 +33,9 @@ export function TestTypes(mssql: mssqldriver.IApp, idx: number, callback: (hasEr
     const t = testTypes[idx]
     const s = script(t)
     mssql.exec(s, undefined, execResult => {
-
+        if (execResult.kind === 'finish') {
+            idx++
+            TestTypes(mssql, idx, callback)
+        }
     })
 }

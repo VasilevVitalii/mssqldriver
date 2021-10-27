@@ -39,13 +39,13 @@ type TRequest =
     { kind: 'before.exec', query: TQuery } |
     { kind: 'after.exec', query: TQuery } |
     { kind: 'spid', spid: number } |
-    { kind: 'columns', columns: TColumnInternal[] } |
+    { kind: 'columns', columns: TColumn[] } |
     { kind: 'stop' }
 
-type TColumnInternal = {
-    originName: string,
+type TColumn = {
     name: string,
     type: string,
+    typeJs: string,
     precision: number,
     scale: number,
     len: number,
@@ -117,6 +117,7 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
     const req = new Request(query.script, error => {
         query.isExecuted = true
         if (error) {
+            error['point'] = query.kind
             query.error = error
             callback({kind: 'stop'})
             return
@@ -125,6 +126,9 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         idx++
         request(connection, optionsBatch, queries, idx, callback)
     })
+
+    let getRow = Function(`row`, `return {}`)
+
     if (query.kind === 'spid') {
         req.on('row', function(row) {
             if (row && row.length > 0 && row[0].value) {
@@ -136,25 +140,23 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         req.on('columnMetadata', function(columnsRaw) {
             const columns = columnsRaw.map(m => {
                 const flags = m['flags']
-                const type = (m.type?.name || '').toLowerCase()
+                const type = columnMetadatTypeToSqlType((m.type?.name || '').toLowerCase())
+                const typeOptions = mssqlcoop.Types.find(f => f.name === type)
                 let dataLength = m.dataLength
-                if (dataLength) {
-                    const fnd = mssqlcoop.Types.find(f => f.name === type && f.bytesOnChar)
-                    if (fnd) {
-                        dataLength = Math.floor(dataLength / fnd.bytesOnChar)
-                    }
+                if (dataLength && typeOptions && typeOptions.bytesOnChar) {
+                    dataLength = Math.floor(dataLength / typeOptions.bytesOnChar)
                 }
                 return {
-                    originName: m.colName,
                     name: m.colName,
                     type: type,
+                    typeJs: typeOptions?.mappingJs,
                     precision: m.precision,
                     scale: m.scale,
                     len: dataLength,
                     isNullable: !!(flags & 0x01),
                     isIdentity: !!(flags & 0x10),
                     isReadOnly: !!(flags & 0x0C),
-                } as TColumnInternal
+                } as TColumn
             })
             columns.filter(f => vv.isEmpty(f.name)).forEach(c => { c.name = 'noname' })
             let idxCopy = 1
@@ -169,9 +171,18 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
                     columns[j].name = maybeName
                 }
             }
+            const getRowFunctionBody = columns.map((m, i) => `${m.name}:row[${i}].value`.concat(m.typeJs ? ` as ${m.typeJs}` : '')).join(',')
+            getRow = Function(`row`, ` return { ${getRowFunctionBody} }`)
             callback({kind: 'columns', columns: columns})
         })
         req.on('row', function(row) {
+            row.forEach(r => {
+                console.log(r.value, typeof r.value)
+            })
+            const aaa = getRow(row)
+            console.log(typeof aaa.__i)
+            console.log(typeof aaa.f)
+
             console.log(row)
         })
     }
@@ -218,4 +229,9 @@ function queries(optionsBatch: TBatchOptions, query: string | string[]): TQuery[
         mid.push({kind: 'query', script: q})
     })
     return [...top, ...mid, ...bot]
+}
+
+function columnMetadatTypeToSqlType(type: string): string {
+    if (type === 'intn') return 'bigint'
+    return type
 }

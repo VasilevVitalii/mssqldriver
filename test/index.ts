@@ -6,6 +6,13 @@ import * as types from './types'
 
 import * as mssqldriver from '../src'
 
+const getRow = new Function(`row`, `return {Number(__i:row[0].value),Number(f:row[1].value)}`)
+
+// function aa (row) {
+//     return {__i:row[0]['value'] as number,f:row[1]['value'] as number}
+// }
+
+console.log(Number('123'))
 
 const localPath = path.join(__dirname, '..', '..', 'test')
 const connectionFile = path.join(localPath, 'connaction.json')
@@ -37,24 +44,27 @@ const mssqlBad = mssqldriver.Create({
         connectionTimeout: 3000
     }
 })
-mssqlBad.exec('SELECT 1', undefined, execResult => {
-    if (execResult?.kind === 'finish') {
-        if (execResult && execResult.finish && execResult.finish.error) {
-            customTest1.error = execResult.finish.error
-            customTest1.point = execResult.finish.error['point']
-        }
-    }
-})
+// mssqlBad.exec('SELECT 1', undefined, execResult => {
+//     if (execResult?.kind === 'finish') {
+//         if (execResult && execResult.finish && execResult.finish.error) {
+//             customTest1.error = execResult.finish.error
+//             customTest1.point = execResult.finish.error['point']
+//         }
+//     }
+// })
 
-mssql.exec(`PRINT 'HI'`, {hasSpid: true}, execResult => {
-    if (execResult.kind === 'spid') {
-        customTest2.spid = execResult.spid
-    } else if (execResult.kind === 'finish') {
-        customTest2.error = execResult.finish.error
-        customTest2.finished = true
-    }
-})
+// mssql.exec(`PRINT 'HI'`, {hasSpid: true}, execResult => {
+//     if (execResult.kind === 'spid') {
+//         customTest2.spid = execResult.spid
+//     } else if (execResult.kind === 'finish') {
+//         customTest2.error = execResult.finish.error
+//         customTest2.finished = true
+//     }
+// })
 
+types.TestTypes(mssql, 0, hasError => {
+
+})
 
 // types.TestTypes(mssql, 0, () => {
 
