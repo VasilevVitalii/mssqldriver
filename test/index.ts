@@ -6,13 +6,15 @@ import * as types from './types'
 
 import * as mssqldriver from '../src'
 
-const getRow = new Function(`row`, `return {Number(__i:row[0].value),Number(f:row[1].value)}`)
+//const getRow = new Function(`row`, `toN`, `return Number("55")`)
 
 // function aa (row) {
 //     return {__i:row[0]['value'] as number,f:row[1]['value'] as number}
 // }
 
-console.log(Number('123'))
+//const aaa = getRow(undefined, (a) => {return Number(a)})
+
+//console.log(String(123))
 
 const localPath = path.join(__dirname, '..', '..', 'test')
 const connectionFile = path.join(localPath, 'connaction.json')

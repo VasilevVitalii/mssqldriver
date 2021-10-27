@@ -32,7 +32,8 @@ type TQuery = {
     kind: ('spid' | 'lock.on' | 'lock.off' | 'query'),
     script: string,
     isExecuted?: boolean,
-    error?: Error
+    error?: Error,
+    tables?: {columns: TColumn[], rows: any[]}[]
 }
 
 type TRequest =
@@ -40,12 +41,13 @@ type TRequest =
     { kind: 'after.exec', query: TQuery } |
     { kind: 'spid', spid: number } |
     { kind: 'columns', columns: TColumn[] } |
+    { kind: 'row', row: any } |
     { kind: 'stop' }
 
 type TColumn = {
     name: string,
     type: string,
-    typeJs: string,
+    typeJs: mssqlcoop.TTypeMappingJs,
     precision: number,
     scale: number,
     len: number,
@@ -56,12 +58,14 @@ type TColumn = {
 
 export type TExecResult =
     { kind: 'spid', spid: number } |
-    { kind: 'finish', finish: {error: Error } }
+    { kind: 'finish', finish: {error?: Error, tables: {columns: TColumn[], rows: any[]}[] } }
 
 export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
     const conn = connection(optionsTds, optionsBatch)
+    const q = queries(conn.optionsBatch, query)
 
     let currentQuery = undefined as TQuery
+    let currentRows = undefined as any[]
 
     if (conn.optionsBatch.receiveMessage !== 'none') {
         conn.connection.on('infoMessage', message => {
@@ -81,25 +85,31 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
             callback({
                 kind: 'finish',
                 finish: {
-                    error: error
+                    error: error,
+                    tables: []
                 }
             })
             return
         }
-        request(conn.connection, conn.optionsBatch, queries(conn.optionsBatch, query), 0, requestStep => {
+        request(conn.connection, conn.optionsBatch, q, 0, requestStep => {
             if (requestStep.kind === 'spid') {
                 callback({kind: 'spid', spid: requestStep.spid})
             } else if (requestStep.kind === 'before.exec') {
                 currentQuery = requestStep.query
             } else if (requestStep.kind === 'columns') {
-                console.log(requestStep.columns)
+                if (!currentQuery.tables) currentQuery.tables = []
+                currentRows = []
+                currentQuery.tables.push({columns: requestStep.columns, rows: currentRows})
+            } else if (requestStep.kind === 'row') {
+                currentRows.push(requestStep.row)
             } else if (requestStep.kind === 'stop') {
                 conn.connection.close()
                 conn.connection = undefined
                 callback({
                     kind: 'finish',
                     finish: {
-                        error: currentQuery?.error
+                        error: currentQuery?.error,
+                        tables: [].concat(...q.filter(f => f.tables).map(m => { return m.tables }))
                     }
                 })
             }
@@ -127,7 +137,7 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         request(connection, optionsBatch, queries, idx, callback)
     })
 
-    let getRow = Function(`row`, `return {}`)
+    let generaforRow = Function(`return undefined`)
 
     if (query.kind === 'spid') {
         req.on('row', function(row) {
@@ -171,19 +181,29 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
                     columns[j].name = maybeName
                 }
             }
-            const getRowFunctionBody = columns.map((m, i) => `${m.name}:row[${i}].value`.concat(m.typeJs ? ` as ${m.typeJs}` : '')).join(',')
-            getRow = Function(`row`, ` return { ${getRowFunctionBody} }`)
+
+            const getRowFunctionBody = [] as string[]
+            columns.forEach((c, i) => {
+                if (c.typeJs === 'number') {
+                    getRowFunctionBody.push(`${c.name}:row[${i}].value === null ? undefined : toN(row[${i}].value)`)
+                } else if (c.typeJs === 'string') {
+                    getRowFunctionBody.push(`${c.name}:row[${i}].value === null ? undefined : toS(row[${i}].value)`)
+                } else if (c.typeJs === 'boolean') {
+                    getRowFunctionBody.push(`${c.name}:row[${i}].value === null ? undefined : toB(row[${i}].value)`)
+                } else if (c.typeJs === 'Date') {
+                    getRowFunctionBody.push(`${c.name}:row[${i}].value === null ? undefined : toD(row[${i}].value)`)
+                } else {
+                    getRowFunctionBody.push(`${c.name}:row[${i}].value === null ? undefined : row[${i}].value`)
+                }
+            })
+
+            generaforRow = Function(
+                `row`, 'toS', 'toN', 'toB', 'toD',
+                ` return { ${getRowFunctionBody.join(',')} }`)
             callback({kind: 'columns', columns: columns})
         })
         req.on('row', function(row) {
-            row.forEach(r => {
-                console.log(r.value, typeof r.value)
-            })
-            const aaa = getRow(row)
-            console.log(typeof aaa.__i)
-            console.log(typeof aaa.f)
-
-            console.log(row)
+            callback({kind: 'row', row: generaforRow(row, toS, toN, toB, toD)})
         })
     }
     connection.execSqlBatch(req)
@@ -235,3 +255,8 @@ function columnMetadatTypeToSqlType(type: string): string {
     if (type === 'intn') return 'bigint'
     return type
 }
+
+function toS (v: any) {return String(v)}
+function toN (v: any) {return Number(v)}
+function toB (v: any) {return Boolean(v)}
+function toD (v: any) {return new Date(v)}
