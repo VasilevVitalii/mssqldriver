@@ -153,8 +153,12 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
                 const type = columnMetadatTypeToSqlType(m)
                 const typeOptions = mssqlcoop.Types.find(f => f.name === type)
                 let dataLength = m.dataLength
-                if (dataLength && typeOptions && typeOptions.bytesOnChar) {
-                    dataLength = Math.floor(dataLength / typeOptions.bytesOnChar)
+                if (dataLength) {
+                    if ((type === 'varchar' || type === 'nvarchar') && dataLength === 65535) {
+                        dataLength = -1
+                    } else if (typeOptions && typeOptions.bytesOnChar) {
+                        dataLength = Math.floor(dataLength / typeOptions.bytesOnChar)
+                    }
                 }
                 return {
                     name: m.colName,
