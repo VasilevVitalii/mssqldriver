@@ -1,4 +1,4 @@
-import { ConnectionConfig, Connection, Request } from 'tedious'
+import { ConnectionConfig, Connection, Request, ColumnMetaData } from 'tedious'
 import * as vv from 'vv-common'
 import * as mssqlcoop from 'mssqlcoop'
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -150,7 +150,7 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         req.on('columnMetadata', function(columnsRaw) {
             const columns = columnsRaw.map(m => {
                 const flags = m['flags']
-                const type = columnMetadatTypeToSqlType((m.type?.name || '').toLowerCase())
+                const type = columnMetadatTypeToSqlType(m)
                 const typeOptions = mssqlcoop.Types.find(f => f.name === type)
                 let dataLength = m.dataLength
                 if (dataLength && typeOptions && typeOptions.bytesOnChar) {
@@ -251,9 +251,16 @@ function queries(optionsBatch: TBatchOptions, query: string | string[]): TQuery[
     return [...top, ...mid, ...bot]
 }
 
-function columnMetadatTypeToSqlType(type: string): string {
-    if (type === 'intn') return 'bigint'
-    return type
+function columnMetadatTypeToSqlType(meta: ColumnMetaData): string {
+    const typeName = (meta.type?.name || '').toLowerCase()
+    if (typeName === 'intn') return 'bigint'
+    if (typeName === 'bitn') return 'bit'
+    if (typeName === 'decimaln') return 'decimal'
+    if (typeName === 'moneyn') return 'money'
+    if (typeName === 'numericn') return 'numeric'
+    if (typeName === 'floatn') return 'float'
+    if (typeName === 'datetimen') return 'datetime'
+    return typeName
 }
 
 function toS (v: any) {return String(v)}

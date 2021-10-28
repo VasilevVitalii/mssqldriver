@@ -30,7 +30,8 @@ const mssql = mssqldriver.Create({
     login: connection.login,
     password: connection.password,
     additional: {
-        connectionTimeout: 3000
+        connectionTimeout: 3000,
+        useUtc: true,
     }
 })
 
@@ -64,8 +65,18 @@ const mssqlBad = mssqldriver.Create({
 //     }
 // })
 
-types.TestTypes(mssql, 0, hasError => {
-
+types.TestTypes(mssql, 0, testTypes => {
+    testTypes.forEach((t, i) => {
+        const msg = `TEST TYPE #${i} (${t.type}): `
+        if (t.errors.length > 0) {
+            console.warn(`${msg} HAS ERRORS`)
+            t.errors.forEach(e => {
+                console.warn(`   ${e}`)
+            })
+        } else {
+            console.log(`${msg} DONE`)
+        }
+    })
 })
 
 // types.TestTypes(mssql, 0, () => {
