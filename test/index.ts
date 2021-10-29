@@ -65,7 +65,7 @@ const mssqlBad = mssqldriver.Create({
 //     }
 // })
 
-types.TestTypes(mssql, 0, testTypes => {
+types.TestTypes(mssql, 0, false, testTypes => {
     testTypes.forEach((t, i) => {
         const msg = `TEST TYPE #${i} (${t.type}): `
         if (t.errors.length > 0) {
