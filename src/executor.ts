@@ -147,13 +147,27 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
             columnsNormalize(columns)
 
             const getRowFunctionBody = [] as string[]
-            columns.forEach((c, i) => {
-                if (c.typeColumn.name === 'bigint') {
-                    getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : parseInt(row[${i}].value)`)
-                } else {
-                    getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value`)
-                }
-            })
+            if (optionsBatch.formatCells === 'native') {
+                columns.forEach((c, i) => {
+                    if (c.typeColumn.name === 'bigint') {
+                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : parseInt(row[${i}].value)`)
+                    } else {
+                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value`)
+                    }
+                })
+            } else if (optionsBatch.formatCells === 'string') {
+                columns.forEach((c, i) => {
+                    if (c.typeColumn.name === 'bit') {
+                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : (row[${i}].value === true ? 'true' : 'false')`)
+                    } else if (['decimal', 'int', 'money', 'numeric', 'smallint', 'smallmoney', 'tinyint', 'bigint', 'float', 'real'].includes(c.typeColumn.name)) {
+                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value.toString()`)
+                    } else if (['binary', 'image', 'varbinary'].includes(c.typeColumn.name)) {
+                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value.toString('hex')`)
+                    } else {
+                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value`)
+                    }
+                })
+            }
             generaforRow = Function('row',`return { ${getRowFunctionBody.join(',')} }`)
             callback({kind: 'columns', columns: columns.map(m => { return m.column })})
         })
@@ -176,6 +190,7 @@ function columnsBuild(columnsRaw: ColumnMetaData[]) : {typeColumn: TType, column
             typeColumn: typeColumn,
             column : {
                 name: m.colName,
+                type: typeColumn.name,
                 precision: m.precision,
                 scale: m.scale,
                 len: dataLength,

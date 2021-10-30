@@ -16,10 +16,10 @@ const du3 = new Date(Date.UTC(1970, 0, 1, d.getHours(), d.getMinutes(), d.getSec
 const ds = `'${vv.dateFormat(d, '126')}'`
 
 const testTypes = [
-    {type: 'bigint', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]},
-    {type: 'bit', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 1, res: true}, {ins: 0, res: false}]},
-    {type: 'decimal', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}, {ins: 1.123, res: 1.123}, {ins: 1.5678, res: 1.568}], customDeclare: 'DECIMAL(18,3)'},
-    {type: 'int', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]},
+    //{type: 'bigint', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]},
+    //{type: 'bit', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 1, res: true}, {ins: 0, res: false}]},
+    //{type: 'decimal', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}, {ins: 1.123, res: 1.123}, {ins: 1.5678, res: 1.568}], customDeclare: 'DECIMAL(18,3)'},
+    //{type: 'int', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]},
     {type: 'money', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}, {ins: 42.1234, res: 42.1234}, {ins: -42.5678, res: -42.5678}]},
     {type: 'numeric', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}, {ins: 1.123, res: 1.123}, {ins: 1.5678, res: 1.568}], customDeclare: 'NUMERIC(18,3)'},
     {type: 'smallint', errors: [], checks: [{ins: 'NULL', res: undefined}, {ins: 42, res: 42}, {ins: -42, res: -42}]},
@@ -60,7 +60,7 @@ function script (t: TTestType): string {
     return res.join('\n')
 }
 
-export function TestTypes(mssql: mssqldriver.IApp, idx: number, hasAllCellString: boolean, callback: (testTypes: TTestType[]) => void) {
+export function TestTypes(mssql: mssqldriver.IApp, idx: number, callback: (testTypes: TTestType[]) => void) {
     if (idx >= testTypes.length) {
         callback(testTypes)
         return
@@ -99,15 +99,71 @@ export function TestTypes(mssql: mssqldriver.IApp, idx: number, hasAllCellString
                         if (c.res.toString('hex') !== f.toString('hex')) {
                             t.errors.push(`row #${i}: res = ${c.res.toString('hex')}, f = ${f.toString('hex')}`)
                         }
-                    } else {
-                        if (c.res !== f) {
+                    } else if (c.res !== f) {
+                        t.errors.push(`row #${i}: res = ${c.res}, f = ${f}`)
+                    }
+                })
+            }
+            idx++
+            TestTypes(mssql, idx, callback)
+        }
+    })
+}
+
+export function TestStringTypes(mssql: mssqldriver.IApp, idx: number, callback: (testTypes: TTestType[]) => void) {
+    if (idx >= testTypes.length) {
+        callback(testTypes)
+        return
+    }
+    const t = testTypes[idx]
+    const s = script(t)
+    mssql.exec(s, {formatCells: 'string'}, execResult => {
+        if (execResult.kind === 'finish') {
+            if (execResult.finish.error) {
+                t.errors.push(`execResult.finish.error = ${execResult.finish.error}`)
+            } else if (execResult.finish.tables.length !== 1) {
+                t.errors.push(`execResult.finish.tables.length = ${execResult.finish.tables.length}`)
+            } else if (execResult.finish.tables[0].rows.length !== t.checks.length) {
+                t.errors.push(`execResult.finish.tables[0].rows.length = ${execResult.finish.tables[0].rows.length}, t.checks.length = ${t.checks.length}`)
+            } else {
+                t.checks.forEach((c, i) => {
+                    const f = execResult.finish.tables[0].rows[i].f
+                    if (f !== undefined && typeof f !== 'string') {
+                        t.errors.push(`row #${i}: typeof f = ${typeof f}`)
+                    } else if ((c.res === undefined && f !== undefined) || (c.res !== undefined && f === undefined)) {
+                        t.errors.push(`row #${i}: c.res  === undefined ${c.res === undefined}, f === undefined ${f === undefined} `)
+                    } else if (c.res !== undefined && f !== undefined) {
+                        if (t.type === 'real') {
+                            const delta = Math.abs(parseFloat(c.res) - parseFloat(f))
+                            const minTrueDelta = 0.0001
+                            if (delta > minTrueDelta) {
+                                t.errors.push(`row #${i}: res = ${c.res}, f = ${f}, minTrueDelta = ${minTrueDelta}`)
+                            }
+                        } else if (t.type === 'binary' || t.type === 'image' || t.type === 'varbinary') {
+                            if (c.res.toString('hex') !== f.toString()) {
+                                t.errors.push(`row #${i}: res = ${c.res}, f = ${f}`)
+                            }
+                        } else if (c.res.toString() !== f.toString()) {
                             t.errors.push(`row #${i}: res = ${c.res}, f = ${f}`)
                         }
                     }
                 })
             }
             idx++
-            TestTypes(mssql, idx, hasAllCellString, callback)
+            TestStringTypes(mssql, idx, callback)
         }
     })
 }
+
+// IF OBJECT_ID('tempdb..#t') IS NOT NULL DROP TABLE #t 
+// CREATE TABLE #t(f1 DATE, f2 DATETIME, f3 DATETIME2, f4 DATETIMEOFFSET, f5 TIME, f6 SMALLDATETIME)
+// INSERT INTO #t(f1, f2, f3, f4, f5, f6)
+// SELECT GETDATE(),GETDATE(),GETDATE(),GETDATE(),GETDATE(),GETDATE()
+// SELECT 
+// CONVERT(VARCHAR(MAX),f1, 126),
+// CONVERT(VARCHAR(MAX),f2, 126),
+// CONVERT(VARCHAR(MAX),f3, 126),
+// CONVERT(VARCHAR(MAX),f4, 126),
+// CONVERT(VARCHAR(MAX),f5, 126),
+// CONVERT(VARCHAR(MAX),f6, 126)
+// FROM #t

@@ -71,7 +71,7 @@ export function ColumnMetadatTypeToKnownType(meta: ColumnMetaData): mssqlcoop.TT
             fnd = mssqlcoop.Types.find(f => f.name === 'datetime')
             break
         default:
-            fnd = mssqlcoop.Types[0]
+            fnd = mssqlcoop.Types.find(f => f.name === typeName)
     }
     return fnd || mssqlcoop.Types[0]
 }

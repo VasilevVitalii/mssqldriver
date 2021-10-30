@@ -5,6 +5,7 @@ import fs from 'fs'
 import * as types from './types'
 
 import * as mssqldriver from '../src'
+import { type } from 'os'
 
 //const getRow = new Function(`row`, `toN`, `return Number("55")`)
 
@@ -65,17 +66,19 @@ const mssqlBad = mssqldriver.Create({
 //     }
 // })
 
-types.TestTypes(mssql, 0, false, testTypes => {
-    testTypes.forEach((t, i) => {
-        const msg = `TEST TYPE #${i} (${t.type}): `
-        if (t.errors.length > 0) {
-            console.warn(`${msg} HAS ERRORS`)
-            t.errors.forEach(e => {
-                console.warn(`   ${e}`)
-            })
-        } else {
-            console.log(`${msg} DONE`)
-        }
+types.TestStringTypes(mssql, 0, () => {
+    types.TestTypes(mssql, 0, testTypes => {
+        testTypes.forEach((t, i) => {
+            const msg = `TEST TYPE #${i} (${t.type}): `
+            if (t.errors.length > 0) {
+                console.warn(`${msg} HAS ERRORS`)
+                t.errors.forEach(e => {
+                    console.warn(`   ${e}`)
+                })
+            } else {
+                console.log(`${msg} DONE`)
+            }
+        })
     })
 })
 
