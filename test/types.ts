@@ -88,7 +88,7 @@ export function TestTypes(mssql: mssqldriver.IApp, idx: number, callback: (testT
                         const delta = Math.abs(c.res.getTime() - f.getTime())
                         let minTrueDelta = 0
                         if (t.type === 'datetime') {
-                            minTrueDelta = 1
+                            minTrueDelta = 3
                         } else if (t.type === 'smalldatetime') {
                             minTrueDelta = 60000
                         }
@@ -142,6 +142,31 @@ export function TestStringTypes(mssql: mssqldriver.IApp, idx: number, callback: 
                         } else if (t.type === 'binary' || t.type === 'image' || t.type === 'varbinary') {
                             if (c.res.toString('hex') !== f.toString()) {
                                 t.errors.push(`row #${i}: res = ${c.res}, f = ${f}`)
+                            }
+                        } else if (t.type === 'date' || t.type === 'datetime2' || t.type === 'datetimeoffset' || t.type === 'time') {
+                            if (vv.dateFormat(c.res, '126') !== f.toString()) {
+                                t.errors.push(`row #${i}: res = ${vv.dateFormat(c.res, '126')}, f = ${f}`)
+                            }
+                        } else if (t.type === 'datetime') {
+                            const d1 = new Date(c.res)
+                            const d2 = new Date(c.res)
+                            const d3 = new Date(c.res)
+                            const d4 = new Date(c.res)
+                            const d5 = new Date(c.res)
+
+                            d2.setMilliseconds(d2.getMilliseconds() + 1)
+                            d3.setMilliseconds(d3.getMilliseconds() + 2)
+                            d4.setMilliseconds(d4.getMilliseconds() - 1)
+                            d5.setMilliseconds(d5.getMilliseconds() - 2)
+
+                            if (![vv.dateFormat(d1, '126'), vv.dateFormat(d2, '126'), vv.dateFormat(d3, '126'), vv.dateFormat(d4, '126'), vv.dateFormat(d5, '126')].includes(f)) {
+                                t.errors.push(`row #${i}: res = [${vv.dateFormat(d1, '126')},${vv.dateFormat(d2, '126')},${vv.dateFormat(d3, '126')},${vv.dateFormat(d4, '126')},${vv.dateFormat(d5, '126')}], f = ${f}`)
+                            }
+                        } else if (t.type === 'smalldatetime') {
+                            const delta = Math.abs((new Date(c.res)).getTime() - (new Date(f)).getTime())
+                            const minTrueDelta = 60000
+                            if (delta > minTrueDelta) {
+                                t.errors.push(`row #${i}: res = ${c.res}, f = ${f}, delta = ${delta}, minTrueDelta = ${minTrueDelta}`)
                             }
                         } else if (c.res.toString() !== f.toString()) {
                             t.errors.push(`row #${i}: res = ${c.res}, f = ${f}`)

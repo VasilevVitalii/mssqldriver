@@ -34,6 +34,6 @@
     "dependencies": {
         "mssqlcoop": "0.0.6",
         "tedious": "^14.0.0",
-        "vv-common": "0.0.3"
+        "vv-common": "0.0.4"
     }
 }

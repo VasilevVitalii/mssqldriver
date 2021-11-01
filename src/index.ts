@@ -1,6 +1,5 @@
 import { OptionsBeautify, OptionsTds } from "./optionsBuild"
-import { ConnectionConfig } from 'tedious'
-import { Exec, TBatchOptions, TExecResult } from "./executor"
+import { Exec, TBatchOptions, TExecResult, TMessage, TTable } from "./executor"
 
 export type TConnection =
     { authentication: 'sqlserver', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
@@ -22,6 +21,8 @@ export type TConnectionAdditional = {
     /**if ping function fail and server name in instance like comp name, find ip for this comp name and change instance. default = true*/
     canInstanceToIp?: boolean
 }
+
+export { TBatchOptions, TExecResult, TMessage, TTable }
 
 export interface IApp {
     //run: (query: string | string[], options?: TBatchOptions) => void

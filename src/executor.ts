@@ -1,5 +1,4 @@
-import { TType } from 'mssqlcoop'
-import { ConnectionConfig, Connection, Request, ColumnMetaData } from 'tedious'
+import { ConnectionConfig, Connection, Request } from 'tedious'
 import * as vv from 'vv-common'
 import * as ec from './executor.common'
 
@@ -24,23 +23,7 @@ export type TBatchOptions = {
     lock?: TBatchOptionsLock,
 }
 
-export type TQuery = {
-    kind: ('spid' | 'lock.on' | 'lock.off' | 'query'),
-    script: string,
-    isExecuted?: boolean,
-    error?: Error,
-    tables?: {columns: TColumn[], rows: any[]}[]
-}
-
-type TRequest =
-    { kind: 'before.exec', query: TQuery } |
-    { kind: 'after.exec', query: TQuery } |
-    { kind: 'spid', spid: number } |
-    { kind: 'columns', columns: TColumn[] } |
-    { kind: 'row', row: any } |
-    { kind: 'stop' }
-
-type TColumn = {
+export type TColumn = {
     name: string,
     type: string,
     precision: number,
@@ -51,9 +34,44 @@ type TColumn = {
     isReadOnly: boolean,
 }
 
+export type TMessage = {
+    queryIdx: number,
+    isError: boolean,
+    message: string,
+    lineNumber: number,
+    procName?: string
+}
+
+export type TTable = {
+    queryIdx: number,
+    columns: TColumn[],
+    rows: any[]
+}
+
+export type TQuery = {
+    kind: ('spid' | 'lock.on' | 'lock.off' | 'query'),
+    script: string,
+    queryIdx: number,
+    isExecuted?: boolean,
+    error?: Error,
+    tables?: TTable[],
+    messages?: TMessage[]
+}
+
+type TRequest =
+    { kind: 'before.exec', query: TQuery } |
+    { kind: 'after.exec', query: TQuery } |
+    { kind: 'spid', spid: number } |
+    { kind: 'columns', columns: TColumn[] } |
+    { kind: 'row', row: any } |
+    { kind: 'stop' }
+
 export type TExecResult =
     { kind: 'spid', spid: number } |
-    { kind: 'finish', finish: {error?: Error, tables: {columns: TColumn[], rows: any[]}[] } }
+    { kind: 'message', message: TMessage } |
+    { kind: 'columns', columns: TColumn[], queryIdx: number } |
+    { kind: 'rows', rows: any[] } |
+    { kind: 'finish', finish: {error?: Error, tables: TTable[], messages: TMessage[] } }
 
 export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
     const conn = ec.BuildConnection(optionsTds, optionsBatch)
@@ -62,14 +80,17 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
     let currentQuery = undefined as TQuery
     let currentRows = undefined as any[]
 
-    if (conn.optionsBatch.receiveMessage !== 'none') {
+    if (conn.optionsBatch.receiveMessage === 'cumulative') {
         conn.connection.on('infoMessage', message => {
             if (currentQuery?.kind !== 'query') return
-            console.log(message)
-        })
-        conn.connection.on('errorMessage', message => {
-            if (currentQuery?.kind !== 'query') return
-            console.log(message)
+            if (!currentQuery.messages) currentQuery.messages = []
+            currentQuery.messages.push({
+                queryIdx: currentQuery.queryIdx,
+                isError: false,
+                message: message.message,
+                lineNumber: message.lineNumber,
+                procName: message.procName === undefined || message.procName === '' ? undefined : message.procName
+            })
         })
     }
 
@@ -81,7 +102,8 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                 kind: 'finish',
                 finish: {
                     error: error,
-                    tables: []
+                    tables: [],
+                    messages: []
                 }
             })
             return
@@ -94,17 +116,41 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
             } else if (requestStep.kind === 'columns') {
                 if (!currentQuery.tables) currentQuery.tables = []
                 currentRows = []
-                currentQuery.tables.push({columns: requestStep.columns, rows: currentRows})
+                currentQuery.tables.push({queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows})
             } else if (requestStep.kind === 'row') {
                 currentRows.push(requestStep.row)
             } else if (requestStep.kind === 'stop') {
                 conn.connection.close()
                 conn.connection = undefined
+                const err = undefined as Error
+                if (currentQuery) {
+                    if (currentQuery.error) {
+                        err.message = currentQuery.error.message
+                        err['point'] = currentQuery.kind.toUpperCase()
+                        err['lineNumber'] = currentQuery.error['lineNumber']
+                        err['procName'] = currentQuery.error['procName'] === undefined || currentQuery.error['procName'] === '' ? undefined : currentQuery.error['procName']
+                    }
+                }
+
+                if (err) {
+                    if (conn.optionsBatch.receiveMessage === 'cumulative') {
+                        if (!currentQuery.messages) currentQuery.messages = []
+                        currentQuery.messages.push({
+                            queryIdx: currentQuery.queryIdx,
+                            isError: true,
+                            message: err.message,
+                            lineNumber: err['lineNumber'],
+                            procName: err['procName']
+                        })
+                    }
+                }
+
                 callback({
                     kind: 'finish',
                     finish: {
-                        error: currentQuery?.error,
-                        tables: [].concat(...q.filter(f => f.tables).map(m => { return m.tables }))
+                        error: err,
+                        tables: [].concat(...q.filter(f => f.tables).map(m => { return m.tables })),
+                        messages: [].concat(...q.filter(f => f.messages).map(m => { return m.messages })),
                     }
                 })
             }
@@ -122,7 +168,6 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
     const req = new Request(query.script, error => {
         query.isExecuted = true
         if (error) {
-            error['point'] = query.kind
             query.error = error
             callback({kind: 'stop'})
             return
@@ -143,79 +188,37 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         })
     } else if (optionsBatch.receiveTables !== 'none') {
         req.on('columnMetadata', function(columnsRaw) {
-            const columns = columnsBuild(columnsRaw)
-            columnsNormalize(columns)
+            const columns = ec.ColumnsBuild(columnsRaw)
+            ec.ColumnsNameNormalize(columns)
 
-            const getRowFunctionBody = [] as string[]
-            if (optionsBatch.formatCells === 'native') {
-                columns.forEach((c, i) => {
-                    if (c.typeColumn.name === 'bigint') {
-                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : parseInt(row[${i}].value)`)
-                    } else {
-                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value`)
-                    }
-                })
-            } else if (optionsBatch.formatCells === 'string') {
-                columns.forEach((c, i) => {
-                    if (c.typeColumn.name === 'bit') {
-                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : (row[${i}].value === true ? 'true' : 'false')`)
-                    } else if (['decimal', 'int', 'money', 'numeric', 'smallint', 'smallmoney', 'tinyint', 'bigint', 'float', 'real'].includes(c.typeColumn.name)) {
-                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value.toString()`)
-                    } else if (['binary', 'image', 'varbinary'].includes(c.typeColumn.name)) {
-                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value.toString('hex')`)
-                    } else {
-                        getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value`)
-                    }
-                })
-            }
-            generaforRow = Function('row',`return { ${getRowFunctionBody.join(',')} }`)
+            generaforRow = ec.GenerateFunctionConvertRow(optionsBatch.formatCells, columns)
             callback({kind: 'columns', columns: columns.map(m => { return m.column })})
         })
-        req.on('row', function(row) {
-            callback({kind: 'row', row: generaforRow(row)})
-        })
+        if (optionsBatch.formatCells === 'native') {
+            req.on('row', function(row) {
+                callback({kind: 'row', row: generaforRow(row)})
+            })
+        } else if (optionsBatch.formatCells === 'string') {
+            req.on('row', function(row) {
+                callback({kind: 'row', row: generaforRow(row, formatDate)})
+            })
+        }
     }
     connection.execSqlBatch(req)
 }
 
-function columnsBuild(columnsRaw: ColumnMetaData[]) : {typeColumn: TType, column: TColumn}[] {
-    const columns = columnsRaw.map(m => {
-        const flags = m['flags']
-        const typeColumn = ec.ColumnMetadatTypeToKnownType(m)
-        let dataLength = m.dataLength
-        if (dataLength && typeColumn.bytesOnChar) {
-            dataLength = Math.floor(dataLength / typeColumn.bytesOnChar)
-        }
-        return {
-            typeColumn: typeColumn,
-            column : {
-                name: m.colName,
-                type: typeColumn.name,
-                precision: m.precision,
-                scale: m.scale,
-                len: dataLength,
-                isNullable: !!(flags & 0x01),
-                isIdentity: !!(flags & 0x10),
-                isReadOnly: !!(flags & 0x0C),
-            } as TColumn
-        }
-    })
+const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3
+})
 
-    return columns
-}
-
-function columnsNormalize(columns: {typeColumn: TType, column: TColumn}[]) {
-    columns.filter(f => vv.isEmpty(f.column.name)).forEach(c => { c.column.name = 'noname' })
-    let idxCopy = 1
-    for (let i = 0; i < columns.length; i++) {
-        for (let j = i + 1; j < columns.length; j++) {
-            if (columns[i].column.name.toLowerCase() !== columns[j].column.name.toLowerCase()) continue
-            let maybeName = `${columns[i].column.name}_copy_${idxCopy}`
-            while (columns.some(f => vv.equal(f.column.name, maybeName))) {
-                idxCopy++
-                maybeName = `${columns[i].column.name}_copy_${idxCopy}`
-            }
-            columns[j].column.name = maybeName
-        }
-    }
+function formatDate(d: Date): string {
+    const s = dateFormatter.format(d)
+    return `${s.substring(0, 10)}T${s.substring(12,24)}`
 }
