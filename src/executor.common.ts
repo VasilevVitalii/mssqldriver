@@ -3,7 +3,7 @@ import * as vv from 'vv-common'
 import * as mssqlcoop from 'mssqlcoop'
 import { TBatchOptions, TQuery, TColumn } from './executor'
 
-export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions) : {connection: Connection, optionsBatch: TBatchOptions} {
+export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions) : {connection: Connection, optionsBatch: TBatchOptions, receiveTablesMsec: number} {
     const database = optionsBatch?.database || optionsTds.options.database
     const lock = optionsBatch && optionsBatch.lock ? {...optionsBatch.lock} : undefined
     if (lock) {
@@ -13,16 +13,21 @@ export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBat
         if (lock.wait < 0) lock.wait = 0
     }
 
+    const receiveTables = optionsBatch?.receiveTables || 'cumulative'
+    let receiveTablesMsec = typeof receiveTables === 'number' ? receiveTables : undefined
+    if (receiveTablesMsec <= 0) receiveTablesMsec = 100
+
     return {
         connection: new Connection({...optionsTds, options: {...optionsTds.options, database: database}}),
         optionsBatch: {
             database: database,
-            receiveTables: optionsBatch?.receiveTables || 'cumulative',
+            receiveTables: receiveTables,
             receiveMessage: optionsBatch?.receiveMessage || 'cumulative',
             formatCells: optionsBatch?.formatCells || 'native',
             hasSpid: optionsBatch && optionsBatch.hasSpid === true ? true : false,
             lock: lock,
-        }
+        },
+        receiveTablesMsec: receiveTablesMsec
     }
 }
 

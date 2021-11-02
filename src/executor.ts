@@ -1,6 +1,7 @@
 import { ConnectionConfig, Connection, Request } from 'tedious'
 import * as vv from 'vv-common'
 import * as ec from './executor.common'
+import { performance } from 'perf_hooks'
 
 export type TBatchOptionsLock = {
     key: string,
@@ -80,17 +81,23 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
     let currentQuery = undefined as TQuery
     let currentRows = undefined as any[]
 
-    if (conn.optionsBatch.receiveMessage === 'cumulative') {
-        conn.connection.on('infoMessage', message => {
+    if (conn.optionsBatch.receiveMessage !== 'none') {
+        conn.connection.on('infoMessage', messageRaw => {
             if (currentQuery?.kind !== 'query') return
-            if (!currentQuery.messages) currentQuery.messages = []
-            currentQuery.messages.push({
+            const message = {
                 queryIdx: currentQuery.queryIdx,
                 isError: false,
-                message: message.message,
-                lineNumber: message.lineNumber,
-                procName: message.procName === undefined || message.procName === '' ? undefined : message.procName
-            })
+                message: messageRaw.message,
+                lineNumber: messageRaw.lineNumber,
+                procName: messageRaw.procName === undefined || messageRaw.procName === '' ? undefined : messageRaw.procName
+            } as TMessage
+
+            if (conn.optionsBatch.receiveMessage === 'cumulative') {
+                if (!currentQuery.messages) currentQuery.messages = []
+                currentQuery.messages.push(message)
+            } else if (conn.optionsBatch.receiveMessage === 'directly') {
+                callback({kind: 'message', message: message})
+            }
         })
     }
 
@@ -109,46 +116,69 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
             return
         }
         request(conn.connection, conn.optionsBatch, q, 0, requestStep => {
+            let performanceReceiveTables = conn.receiveTablesMsec ? performance.now() : -1
+
             if (requestStep.kind === 'spid') {
                 callback({kind: 'spid', spid: requestStep.spid})
             } else if (requestStep.kind === 'before.exec') {
                 currentQuery = requestStep.query
             } else if (requestStep.kind === 'columns') {
-                if (!currentQuery.tables) currentQuery.tables = []
-                currentRows = []
-                currentQuery.tables.push({queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows})
+                if (performanceReceiveTables >= 0) {
+                    if (currentRows && currentRows.length > 0) {
+                        callback({kind: 'rows', rows: currentRows})
+                    }
+                    currentRows = []
+                    callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
+                } else {
+                    if (!currentQuery.tables) currentQuery.tables = []
+                    currentRows = []
+                    currentQuery.tables.push({queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows})
+                }
             } else if (requestStep.kind === 'row') {
                 currentRows.push(requestStep.row)
+                if (performanceReceiveTables >= 0) {
+                    const performanceReceiveTablesNew = performance.now()
+                    if (performanceReceiveTables + conn.receiveTablesMsec > performanceReceiveTablesNew) {
+                        callback({kind: 'rows', rows: currentRows})
+                        currentRows = []
+                        performanceReceiveTables = performanceReceiveTablesNew
+                    }
+                }
             } else if (requestStep.kind === 'stop') {
                 conn.connection.close()
                 conn.connection = undefined
-                const err = undefined as Error
+                let error = undefined as Error
                 if (currentQuery) {
                     if (currentQuery.error) {
-                        err.message = currentQuery.error.message
-                        err['point'] = currentQuery.kind.toUpperCase()
-                        err['lineNumber'] = currentQuery.error['lineNumber']
-                        err['procName'] = currentQuery.error['procName'] === undefined || currentQuery.error['procName'] === '' ? undefined : currentQuery.error['procName']
+                        error = {
+                            message: currentQuery.error.message,
+                            name: currentQuery.error.name
+                        }
+                        error['point'] = currentQuery.kind.toUpperCase()
+                        error['lineNumber'] = currentQuery.error['lineNumber']
+                        error['procName'] = currentQuery.error['procName'] === undefined || currentQuery.error['procName'] === '' ? undefined : currentQuery.error['procName']
                     }
                 }
 
-                if (err) {
+                if (error && conn.optionsBatch.receiveMessage !== 'none') {
+                    const message = {
+                        queryIdx: currentQuery.queryIdx,
+                        isError: true,
+                        message: error.message,
+                        lineNumber: error['lineNumber'],
+                        procName: error['procName']
+                    } as TMessage
                     if (conn.optionsBatch.receiveMessage === 'cumulative') {
                         if (!currentQuery.messages) currentQuery.messages = []
-                        currentQuery.messages.push({
-                            queryIdx: currentQuery.queryIdx,
-                            isError: true,
-                            message: err.message,
-                            lineNumber: err['lineNumber'],
-                            procName: err['procName']
-                        })
+                        currentQuery.messages.push(message)
+                    } else if (conn.optionsBatch.receiveMessage === 'directly') {
+                        callback({kind: 'message', message: message})
                     }
                 }
-
                 callback({
                     kind: 'finish',
                     finish: {
-                        error: err,
+                        error: error,
                         tables: [].concat(...q.filter(f => f.tables).map(m => { return m.tables })),
                         messages: [].concat(...q.filter(f => f.messages).map(m => { return m.messages })),
                     }

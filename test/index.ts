@@ -18,10 +18,31 @@ const mssql = mssqldriver.Create({
     login: connection.login,
     password: connection.password,
     additional: {
-        connectionTimeout: 3000,
+        connectionTimeout: 5000,
         useUtc: true,
     }
 })
+
+
+const mssql1 = mssqldriver.Create({
+    authentication: 'sqlserver',
+    instance: connection.authentication,
+    login: connection.login,
+    password: connection.password,
+    additional: {
+        connectionTimeout: 5000,
+        database: 'rrMasterData',
+        useUtc: true,
+    }
+})
+mssql1.exec(['SELECT count(*) FROM dbo.assortment','SELECT * FROM dbo.assortment WITH (NOLOCK)'], {receiveTables: 500}, execResult => {
+    const a = execResult
+    if (execResult.kind === 'rows') {
+        console.log(execResult.rows.length)
+    }
+})
+
+/*
 
 const mssqlBad = mssqldriver.Create({
     authentication: 'sqlserver',
@@ -107,49 +128,4 @@ types.TestStringTypes(mssql, 0, () => {
     })
 })
 
-
-// let spid1 = 0
-// mssql.exec([`PRINT 'HI1'; SELECT 1 AS F1`,`PRINT 'HI2'; SELECT 2 AS F2;`], {hasSpid: true}, execResult => {
-//     if (execResult.kind === 'spid') {
-//         spid1 = execResult.spid
-//     } else if (execResult.kind === 'finish') {
-//         const needMessages = '[{"queryIdx":0,"isError":false,"message":"HI1","lineNumber":1},{"queryIdx":1,"isError":false,"message":"HI2","lineNumber":1}]'
-//         const needTables = '[{"queryIdx":0,"columns":[{"name":"F1","type":"int","isNullable":false,"isIdentity":false,"isReadOnly":false}],"rows":[{"F1":1}]},{"queryIdx":1,"columns":[{"name":"F2","type":"int","isNullable":false,"isIdentity":false,"isReadOnly":false}],"rows":[{"F2":2}]}]'
-
-//         if (!spid1 || spid1 <= 0) {
-//             console.warn(`SPID FAIL`)
-//             result.hasError = true
-//         } else if (needMessages !== JSON.stringify(execResult.finish.messages)) {
-//             console.warn(`CUMULATIVE MESSAGE FAIL`)
-//             result.hasError = true
-//         } else if (needTables !== JSON.stringify(execResult.finish.tables)) {
-//             console.warn(`CUMULATIVE TABLES FAIL`)
-//             result.hasError = true
-//         } else {
-//             console.log(`SPID AND CUMULATIVE DONE`)
-//         }
-//         result.testCount++
-//     }
-// })
-
-// mssql.exec([`SELECT 1 AS F1`, `SELECT`, `SELECT 2 AS F2`], undefined, execResult => {
-//     if (execResult.kind === 'finish') {
-
-//         console.log(JSON.stringify(execResult.finish.messages))
-//         console.log(JSON.stringify(execResult.finish.tables))
-
-//         const needMessages = ''
-//         const needTables = ''
-//         if (needMessages !== JSON.stringify(execResult.finish.messages)) {
-//             console.warn(`CUMULATIVE (ERROR) MESSAGE FAIL`)
-//             result.hasError = true
-//         } else if (needTables !== JSON.stringify(execResult.finish.tables)) {
-//             console.warn(`CUMULATIVE (ERROR) TABLES FAIL`)
-//             result.hasError = true
-//         } else {
-//             console.log(`CUMULATIVE (ERROR) DONE`)
-//         }
-//         result.testCount++
-//     }
-// })
-
+*/
