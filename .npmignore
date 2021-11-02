@@ -1,9 +1,9 @@
-.auto
-.github
-.vscode
-node_modules
-src
-test
+/.auto
+/.github
+/.vscode
+/node_modules
+/src
+/test
 .eslintignore
 .eslintrc.json
 .prettierignore

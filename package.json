@@ -1,6 +1,6 @@
 {
     "name": "mssqldriver",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "description": "Driver for MS SQL Server, based on tediousjs",
     "main": "dist/index.js",
     "scripts": {
