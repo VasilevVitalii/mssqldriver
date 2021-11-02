@@ -1,8 +1,8 @@
 {
     "name": "mssqldriver",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "description": "Driver for MS SQL Server, based on tediousjs",
-    "main": "dist/index.js",
+    "main": "dist/src/index.js",
     "scripts": {
         "test": "node ./dist/test/index.js",
         "update": "npx npm-check-updates -u && npm i && npm audit fix && node ./node_modules/vv-template-nodebackend/index.js",
