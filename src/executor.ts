@@ -116,7 +116,7 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
             return
         }
         request(conn.connection, conn.optionsBatch, q, 0, requestStep => {
-            let performanceReceiveTables = conn.receiveTablesMsec ? performance.now() : -1
+            let performanceReceiveTables = conn.receiveTablesMsec ? 1 : -1
 
             if (requestStep.kind === 'spid') {
                 callback({kind: 'spid', spid: requestStep.spid})
@@ -129,6 +129,7 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                     }
                     currentRows = []
                     callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
+                    performanceReceiveTables = performance.now()
                 } else {
                     if (!currentQuery.tables) currentQuery.tables = []
                     currentRows = []

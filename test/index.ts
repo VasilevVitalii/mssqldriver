@@ -35,8 +35,13 @@ const mssql1 = mssqldriver.Create({
         useUtc: true,
     }
 })
-mssql1.exec(['SELECT count(*) FROM dbo.assortment','SELECT * FROM dbo.assortment WITH (NOLOCK)'], {receiveTables: 500}, execResult => {
+mssql1.exec(['SELECT count(*) FROM dbo.assortment','SELECT top 10 * FROM dbo.assortment WITH (NOLOCK)'], {receiveTables: 500}, execResult => {
     const a = execResult
+
+    if (execResult.kind === 'columns') {
+        console.log('colimns!')
+    }
+
     if (execResult.kind === 'rows') {
         console.log(execResult.rows.length)
     }
