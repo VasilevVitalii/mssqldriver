@@ -1,5 +1,6 @@
 import { OptionsBeautify, OptionsTds } from "./optionsBuild"
 import { Exec, TBatchOptions, TExecResult, TMessage, TTable } from "./executor"
+import { ServerInfo } from "mssqlcoop/dist/src/scripts/serverInfo"
 
 export type TConnection =
     { authentication: 'sqlserver', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
@@ -22,25 +23,42 @@ export type TConnectionAdditional = {
     canInstanceToIp?: boolean
 }
 
+export type TServerInfo = {
+    version: string,
+    timezone: number,
+    duration: number
+}
+
 export { TBatchOptions, TExecResult, TMessage, TTable }
 
 export interface IApp {
-    //run: (query: string | string[], options?: TBatchOptions) => void
-    exec: (query: string | string[], options: TBatchOptions, callback: (result: TExecResult) => void) => void
+    exec: (query: string | string[], options: TBatchOptions, callback: (result: TExecResult) => void) => void,
+    ping: (callback: (error: Error, info: TServerInfo) => void) => void
 }
 
 export function Create(options: TConnection): IApp {
     const opt = OptionsBeautify(options)
     const optTds = OptionsTds(opt)
 
-    //Exec(optTds, undefined, "select 42, 'hello world'")
-
     return {
-        // run(query: string | string[], options?: TBatchOptions) {
-        //     Run(optTds, options, query)
-        // },
         exec(query: string | string[], options: TBatchOptions, callback: (result: TExecResult) => void) {
             Exec(optTds, options, query, callback)
         },
+        ping(callback: (error: Error, info: TServerInfo) => void) {
+            Exec(optTds, {receiveMessage: 'none'}, ServerInfo(), execResult => {
+                if (execResult.kind !== 'finish') return
+                if (execResult.finish.error) {
+                    callback(execResult.finish.error, undefined)
+                } else {
+                    const table = execResult.finish.tables.length > 0 ? execResult.finish.tables[0] : undefined
+                    const row = table && table.rows.length > 0 ? table.rows[0] : undefined
+                    callback(undefined, {
+                        version: row?.version,
+                        timezone: row?.timezone,
+                        duration: execResult.finish.duration.total
+                    })
+                }
+            })
+        }
     }
 }
