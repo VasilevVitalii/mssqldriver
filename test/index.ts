@@ -23,31 +23,21 @@ const mssql = mssqldriver.Create({
     }
 })
 
-
-const mssql1 = mssqldriver.Create({
-    authentication: 'sqlserver',
-    instance: connection.authentication,
-    login: connection.login,
-    password: connection.password,
-    additional: {
-        connectionTimeout: 5000,
-        database: 'rrMasterData',
-        useUtc: true,
-    }
-})
-mssql1.exec(['SELECT count(*) FROM dbo.assortment','SELECT top 10 * FROM dbo.assortment WITH (NOLOCK)'], {receiveTables: 500}, execResult => {
-    const a = execResult
-
-    if (execResult.kind === 'columns') {
-        console.log('colimns!')
-    }
-
-    if (execResult.kind === 'rows') {
-        console.log(execResult.rows.length)
-    }
-})
-
-/*
+// let c = 0
+// mssql.exec(['SELECT TOP 100000 * FROM sys.objects AS o1, sys.objects AS o2, sys.objects AS o3'], {receiveTables: 500}, execResult => {
+//     const a = execResult
+//     if (execResult.kind === 'columns') {
+//         console.log('colimns!')
+//     }
+//     if (execResult.kind === 'rows') {
+//         c = c + execResult.rows.length
+//         console.log(c)
+//     }
+//     if (execResult.kind === 'finish') {
+//         console.log(execResult.finish)
+//         console.log(execResult.finish.duration.total)
+//     }
+// })
 
 const mssqlBad = mssqldriver.Create({
     authentication: 'sqlserver',
@@ -132,5 +122,3 @@ types.TestStringTypes(mssql, 0, () => {
         })
     })
 })
-
-*/

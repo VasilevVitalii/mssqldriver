@@ -73,6 +73,7 @@ export function TestVariants(mssql: mssqldriver.IApp, idx: number, callback: (te
         } else if (execResult.kind === 'rows') {
             t.resultTables[t.resultTables.length - 1].rows.push(...execResult.rows)
         } else if (execResult.kind === 'finish') {
+            execResult.finish.duration = undefined
             t.result = execResult
             idx++
             TestVariants(mssql, idx, callback)

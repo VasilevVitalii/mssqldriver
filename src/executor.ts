@@ -53,6 +53,7 @@ export type TQuery = {
     kind: ('spid' | 'lock.on' | 'lock.off' | 'query'),
     script: string,
     queryIdx: number,
+    duration?: number,
     isExecuted?: boolean,
     error?: Error,
     tables?: TTable[],
@@ -72,7 +73,7 @@ export type TExecResult =
     { kind: 'message', message: TMessage } |
     { kind: 'columns', columns: TColumn[], queryIdx: number } |
     { kind: 'rows', rows: any[] } |
-    { kind: 'finish', finish: {error?: Error, tables: TTable[], messages: TMessage[] } }
+    { kind: 'finish', finish: {error?: Error, tables: TTable[], messages: TMessage[], duration: {total: number, queries: {queryIdx: number, value: number}[]} } }
 
 export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
     const conn = ec.BuildConnection(optionsTds, optionsBatch)
@@ -110,26 +111,42 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                 finish: {
                     error: error,
                     tables: [],
-                    messages: []
+                    messages: [],
+                    duration: {
+                        total: 0,
+                        queries: []
+                    }
                 }
             })
             return
         }
-        request(conn.connection, conn.optionsBatch, q, 0, requestStep => {
-            let performanceReceiveTables = conn.receiveTablesMsec ? 1 : -1
 
+        let allowSendRows = true
+        let timerReceiveTables = undefined as NodeJS.Timer
+        if (conn.receiveTablesMsec > 0) {
+            timerReceiveTables = setInterval(() => {
+                if (!allowSendRows || !currentRows) return
+                const rows = currentRows.splice(0, currentRows.length)
+                if (rows.length > 0) {
+                    callback({kind: 'rows', rows: rows})
+                }
+            }, conn.receiveTablesMsec)
+        }
+
+        request(conn.connection, conn.optionsBatch, q, 0, requestStep => {
             if (requestStep.kind === 'spid') {
                 callback({kind: 'spid', spid: requestStep.spid})
             } else if (requestStep.kind === 'before.exec') {
                 currentQuery = requestStep.query
             } else if (requestStep.kind === 'columns') {
-                if (performanceReceiveTables >= 0) {
+                if (conn.receiveTablesMsec > 0) {
+                    allowSendRows = false
                     if (currentRows && currentRows.length > 0) {
                         callback({kind: 'rows', rows: currentRows})
                     }
                     currentRows = []
                     callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
-                    performanceReceiveTables = performance.now()
+                    allowSendRows = true
                 } else {
                     if (!currentQuery.tables) currentQuery.tables = []
                     currentRows = []
@@ -137,17 +154,23 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                 }
             } else if (requestStep.kind === 'row') {
                 currentRows.push(requestStep.row)
-                if (performanceReceiveTables >= 0) {
-                    const performanceReceiveTablesNew = performance.now()
-                    if (performanceReceiveTables + conn.receiveTablesMsec > performanceReceiveTablesNew) {
-                        callback({kind: 'rows', rows: currentRows})
-                        currentRows = []
-                        performanceReceiveTables = performanceReceiveTablesNew
-                    }
-                }
             } else if (requestStep.kind === 'stop') {
                 conn.connection.close()
                 conn.connection = undefined
+
+                if (conn.receiveTablesMsec > 0) {
+                    allowSendRows = false
+                    if (currentRows && currentRows.length > 0) {
+                        callback({kind: 'rows', rows: currentRows})
+                        currentRows = []
+                    }
+                }
+
+                if (timerReceiveTables) {
+                    clearInterval(timerReceiveTables)
+                    timerReceiveTables = undefined
+                }
+
                 let error = undefined as Error
                 if (currentQuery) {
                     if (currentQuery.error) {
@@ -176,12 +199,21 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                         callback({kind: 'message', message: message})
                     }
                 }
+
+                const durations = q.filter(f => f.duration).map(m => { return {queryIdx: m.queryIdx, value: Math.round(m.duration)} })
+                let totalDurations = 0
+                durations.forEach(d => { totalDurations = totalDurations + d.value })
+
                 callback({
                     kind: 'finish',
                     finish: {
                         error: error,
                         tables: [].concat(...q.filter(f => f.tables).map(m => { return m.tables })),
                         messages: [].concat(...q.filter(f => f.messages).map(m => { return m.messages })),
+                        duration: {
+                            total: totalDurations,
+                            queries: durations
+                        }
                     }
                 })
             }
@@ -196,7 +228,9 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
     }
     const query = queries[idx]
     callback({kind: 'before.exec', query: query})
+    const perfStart = performance.now()
     const req = new Request(query.script, error => {
+        query.duration = performance.now() - perfStart
         query.isExecuted = true
         if (error) {
             query.error = error
