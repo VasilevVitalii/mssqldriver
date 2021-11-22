@@ -51,6 +51,28 @@ const mssqlBad = mssqldriver.Create({
 
 let hasError = false
 
+mssqlBad.exec([`print 'Hello'`, `select * from sys.columns`], {formatCells: 'string', hasSpid: true, receiveMessage: 'directly', receiveTables: 200}, callbackExec => {
+    if (callbackExec.kind === 'spid') {
+        console.log(`spid`, callbackExec.spid)
+        return
+    }
+    if (callbackExec.kind === 'message') {
+        console.log(`message`, callbackExec.message)
+        return
+    }
+    if (callbackExec.kind === 'columns') {
+        console.log(`columns (new table begin)`, callbackExec.columns)
+        return
+    }
+    if (callbackExec.kind === 'rows') {
+        console.log(`rows`, callbackExec.rows)
+        return
+    }
+    if (callbackExec.kind === 'finish') {
+        console.log(`finish`, callbackExec.finish)
+    }
+})
+
 types.TestStringTypes(mssql, 0, () => {
     types.TestTypes(mssql, 0, testTypes => {
         testTypes.forEach((t, i) => {
