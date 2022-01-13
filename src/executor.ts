@@ -12,8 +12,8 @@ export type TBatchOptionsLock = {
 export type TBatchOptions = {
     /** use this database before start query, default - undefined (use database from connection)*/
     database?: string,
-    /**where return tables - 'none' - never, number - chunked return each this msec value, 'cumulative' - in end result object; default - 'cumulative'*/
-    receiveTables?: ('none' | number | 'cumulative'),
+    /**where return tables - 'none' - never, 'directly' - each message return immediately, number - chunked return each this msec value, 'cumulative' - in end result object; default - 'cumulative'*/
+    receiveTables?: ('none' | number | 'directly' | 'cumulative'),
     /**where return messages - 'none' - never, 'directly' - each message return immediately, 'cumulative' - in end result object; default - 'cumulative'*/
     receiveMessage?: ('none' | 'directly' | 'cumulative'),
     /** mode format cells from rows from tables, 'native'- by datatypes, example for column 'datetime', if 'native' - type 'Date', if 'string' - type string with 126 format; default = 'native'*/
@@ -76,8 +76,8 @@ export type TExecResult =
     { kind: 'finish', finish: {error?: Error, tables: TTable[], messages: TMessage[], duration: {total: number, queries: {queryIdx: number, value: number}[]} } }
 
 export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
-    const conn = ec.BuildConnection(optionsTds, optionsBatch)
-    const q = ec.BuildQueries(conn.optionsBatch, query)
+    let conn = ec.BuildConnection(optionsTds, optionsBatch)
+    let q = ec.BuildQueries(conn.optionsBatch, query)
 
     let currentQuery = undefined as TQuery
     let currentRows = undefined as any[]
@@ -147,16 +147,23 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                     currentRows = []
                     callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
                     allowSendRows = true
+                } else if (optionsBatch.receiveTables === 'directly') {
+                    callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
                 } else {
                     if (!currentQuery.tables) currentQuery.tables = []
                     currentRows = []
                     currentQuery.tables.push({queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows})
                 }
             } else if (requestStep.kind === 'row') {
-                currentRows.push(requestStep.row)
+                if (optionsBatch.receiveTables === 'directly') {
+                    callback({kind: 'rows', rows: [requestStep.row]})
+                } else {
+                    currentRows.push(requestStep.row)
+                }
             } else if (requestStep.kind === 'stop') {
+                conn.connection.removeAllListeners()
                 conn.connection.close()
-                conn.connection = undefined
+                conn.connection = null
 
                 if (conn.receiveTablesMsec > 0) {
                     allowSendRows = false
@@ -216,6 +223,8 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                         }
                     }
                 })
+                q = null
+                conn = null
             }
         })
     })
@@ -229,7 +238,9 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
     const query = queries[idx]
     callback({kind: 'before.exec', query: query})
     const perfStart = performance.now()
-    const req = new Request(query.script, error => {
+    let req = new Request(query.script, error => {
+        req.removeAllListeners()
+        req = null
         query.duration = performance.now() - perfStart
         query.isExecuted = true
         if (error) {
@@ -272,17 +283,18 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
     connection.execSqlBatch(req)
 }
 
-const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-})
+// const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+//     year: 'numeric',
+//     month: '2-digit',
+//     day: '2-digit',
+//     hour12: false,
+//     hour: '2-digit',
+//     minute: '2-digit',
+//     second: '2-digit'
+// })
 
 function formatDate(d: Date): string {
-    const s = dateFormatter.format(d)
-    return `${s.substring(0, 10)}T${s.substring(12,24)}`
+    //const s = dateFormatter.format(d)
+    //return `${s.substring(0, 10)}T${s.substring(12,24)}`
+    return vv.dateFormat(d, '126')
 }

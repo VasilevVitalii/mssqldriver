@@ -23,21 +23,19 @@ const mssql = mssqldriver.Create({
     }
 })
 
-// let c = 0
-// mssql.exec(['SELECT TOP 100000 * FROM sys.objects AS o1, sys.objects AS o2, sys.objects AS o3'], {receiveTables: 500}, execResult => {
-//     const a = execResult
-//     if (execResult.kind === 'columns') {
-//         console.log('colimns!')
-//     }
-//     if (execResult.kind === 'rows') {
-//         c = c + execResult.rows.length
-//         console.log(c)
-//     }
-//     if (execResult.kind === 'finish') {
-//         console.log(execResult.finish)
-//         console.log(execResult.finish.duration.total)
-//     }
-// })
+/*
+console.log('GO!')
+let timer = setTimeout(function tick() {
+    console.log('START')
+    mssql.exec("SELECT * FROM rrMasterData.dbo.Assortment WITH (NOLOCK)", {formatCells: 'string', receiveMessage: 'none', receiveTables: 'directly'}, result => {
+    if (result.kind === 'finish') {
+            console.log('FINISH')
+            result.finish.tables = []
+            timer = setTimeout(tick, 1000 * 30)
+        }
+    })
+}, 1000 * 30)
+*/
 
 const mssqlBad = mssqldriver.Create({
     authentication: 'sqlserver',

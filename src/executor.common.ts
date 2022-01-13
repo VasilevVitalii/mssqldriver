@@ -14,8 +14,7 @@ export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBat
     }
 
     const receiveTables = optionsBatch?.receiveTables || 'cumulative'
-    let receiveTablesMsec = typeof receiveTables === 'number' ? receiveTables : undefined
-    if (receiveTablesMsec <= 0) receiveTablesMsec = 100
+    const receiveTablesMsec = typeof receiveTables === 'number' ? (receiveTables > 0 ? receiveTables : 100) : undefined
 
     return {
         connection: new Connection({...optionsTds, options: {...optionsTds.options, database: database}}),
