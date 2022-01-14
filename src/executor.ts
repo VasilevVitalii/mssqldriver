@@ -12,7 +12,7 @@ export type TBatchOptionsLock = {
 export type TBatchOptions = {
     /** use this database before start query, default - undefined (use database from connection)*/
     database?: string,
-    /**where return tables - 'none' - never, 'directly' - each message return immediately, number - chunked return each this msec value, 'cumulative' - in end result object; default - 'cumulative'*/
+    /**where return tables - 'none' - never, 'directly' - each row return immediately, number - chunked return each this msec value, 'cumulative' - in end result object; default - 'cumulative'*/
     receiveTables?: ('none' | number | 'directly' | 'cumulative'),
     /**where return messages - 'none' - never, 'directly' - each message return immediately, 'cumulative' - in end result object; default - 'cumulative'*/
     receiveMessage?: ('none' | 'directly' | 'cumulative'),
@@ -147,7 +147,7 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                     currentRows = []
                     callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
                     allowSendRows = true
-                } else if (optionsBatch.receiveTables === 'directly') {
+                } else if (conn.optionsBatch.receiveTables === 'directly') {
                     callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
                 } else {
                     if (!currentQuery.tables) currentQuery.tables = []
@@ -155,7 +155,7 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                     currentQuery.tables.push({queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows})
                 }
             } else if (requestStep.kind === 'row') {
-                if (optionsBatch.receiveTables === 'directly') {
+                if (conn.optionsBatch.receiveTables === 'directly') {
                     callback({kind: 'rows', rows: [requestStep.row]})
                 } else {
                     currentRows.push(requestStep.row)

@@ -22,7 +22,6 @@ const mssql = mssqldriver.Create({
         useUtc: true,
     }
 })
-
 /*
 console.log('GO!')
 let timer = setTimeout(function tick() {
@@ -34,7 +33,7 @@ let timer = setTimeout(function tick() {
             timer = setTimeout(tick, 1000 * 30)
         }
     })
-}, 1000 * 30)
+}, 1000 * 5)
 */
 
 const mssqlBad = mssqldriver.Create({

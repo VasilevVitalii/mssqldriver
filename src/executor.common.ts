@@ -123,7 +123,7 @@ export function ColumnsNameNormalize(columns: {typeColumn: mssqlcoop.TType, colu
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export function GenerateFunctionConvertRow(formatCells: ('native' | 'string'), columns: {typeColumn: mssqlcoop.TType, column: TColumn}[] ): Function {
+export function GenerateFunctionConvertRow(formatCells: ('native' | 'string'), columns: {typeColumn: mssqlcoop.TType, column: TColumn}[]): Function {
     const getRowFunctionBody = [] as string[]
     if (formatCells === 'native') {
         columns.forEach((c, i) => {

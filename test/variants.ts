@@ -1,5 +1,3 @@
-import mssqlcoop from 'mssqlcoop'
-import * as vv from 'vv-common'
 import * as mssqldriver from '../src'
 
 type TTestVariant = {
