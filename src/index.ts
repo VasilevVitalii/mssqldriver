@@ -1,6 +1,6 @@
 import { OptionsBeautify, OptionsTds } from "./optionsBuild"
 import { Exec, TBatchOptions, TExecResult, TMessage, TTable } from "./executor"
-import { ServerInfo } from "mssqlcoop/dist/src/scripts/serverInfo"
+import * as mssqlcoop from "mssqlcoop"
 
 export type TConnection =
     { authentication: 'sqlserver', instance: string, login: string, password: string, additional?: TConnectionAdditional } |
@@ -45,7 +45,7 @@ export function Create(options: TConnection): IApp {
             Exec(optTds, options, query, callback)
         },
         ping(callback: (error: Error, info: TServerInfo) => void) {
-            Exec(optTds, {receiveMessage: 'none'}, ServerInfo(), execResult => {
+            Exec(optTds, {receiveMessage: 'none'}, mssqlcoop.SchemataServer.Info(), execResult => {
                 if (execResult.kind !== 'finish') return
                 if (execResult.finish.error) {
                     callback(execResult.finish.error, undefined)
