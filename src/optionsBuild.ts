@@ -1,6 +1,6 @@
 import os from 'os'
 import tds from 'tedious'
-import vv from 'vv-common'
+import { nz, toInt } from 'vv-common'
 import { TConnection, TConnectionAdditional } from ".";
 
 export function OptionsBeautify(optionsRaw: TConnection): TConnection {
@@ -34,16 +34,16 @@ export function OptionsBeautify(optionsRaw: TConnection): TConnection {
 }
 
 export function OptionsTds(options: TConnection): tds.ConnectionConfig {
-    const server = options.instance.replace(/\\/g, '/').split('/')
-    const serverTds = server.length > 0 ? server.shift() : undefined
-
+    let serverRaw = options.instance.replace(/\\/g, '/')
     let portTds = undefined
-    const portTdsIndx = server.length > 0 ? server[server.length - 1].lastIndexOf(',') : -1
-    if (server.length > 0 && portTdsIndx > 0) {
-        portTds = vv.nz(vv.toInt(server[server.length - 1].substring(portTdsIndx).trim()), -1)
-        server[server.length - 1] = server[server.length - 1].substring(0, portTdsIndx).trim()
+    const portTdsIndx = serverRaw.lastIndexOf(',')
+    if (portTdsIndx > 0) {
+        portTds = nz(toInt(serverRaw.substring(portTdsIndx + 1).trim()), -1)
+        serverRaw = serverRaw.substring(0, portTdsIndx).trim()
     }
 
+    const server = serverRaw.split('/')
+    const serverTds = server.length > 0 ? server.shift() : undefined
     const instanceNameTds = server.length > 0 ? server.join('/') : undefined
 
     return {

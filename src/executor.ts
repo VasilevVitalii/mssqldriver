@@ -1,5 +1,5 @@
 import { ConnectionConfig, Connection, Request } from 'tedious'
-import * as vv from 'vv-common'
+import { toInt, dateFormat } from 'vv-common'
 import * as ec from './executor.common'
 import { performance } from 'perf_hooks'
 
@@ -73,7 +73,7 @@ export type TExecResult =
     { kind: 'message', message: TMessage } |
     { kind: 'columns', columns: TColumn[], queryIdx: number } |
     { kind: 'rows', rows: any[] } |
-    { kind: 'finish', finish: {error?: Error, tables: TTable[], messages: TMessage[], duration: {total: number, queries: {queryIdx: number, value: number}[]} } }
+    { kind: 'finish', finish: { error?: Error, tables: TTable[], messages: TMessage[], duration: { total: number, queries: { queryIdx: number, value: number }[] } } }
 
 export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, query: string | string[], callback: (result: TExecResult) => void) {
     let conn = ec.BuildConnection(optionsTds, optionsBatch)
@@ -97,7 +97,7 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                 if (!currentQuery.messages) currentQuery.messages = []
                 currentQuery.messages.push(message)
             } else if (conn.optionsBatch.receiveMessage === 'directly') {
-                callback({kind: 'message', message: message})
+                callback({ kind: 'message', message: message })
             }
         })
     }
@@ -128,35 +128,35 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                 if (!allowSendRows || !currentRows) return
                 const rows = currentRows.splice(0, currentRows.length)
                 if (rows.length > 0) {
-                    callback({kind: 'rows', rows: rows})
+                    callback({ kind: 'rows', rows: rows })
                 }
             }, conn.receiveTablesMsec)
         }
 
         request(conn.connection, conn.optionsBatch, q, 0, requestStep => {
             if (requestStep.kind === 'spid') {
-                callback({kind: 'spid', spid: requestStep.spid})
+                callback({ kind: 'spid', spid: requestStep.spid })
             } else if (requestStep.kind === 'before.exec') {
                 currentQuery = requestStep.query
             } else if (requestStep.kind === 'columns') {
                 if (conn.receiveTablesMsec > 0) {
                     allowSendRows = false
                     if (currentRows && currentRows.length > 0) {
-                        callback({kind: 'rows', rows: currentRows})
+                        callback({ kind: 'rows', rows: currentRows })
                     }
                     currentRows = []
-                    callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
+                    callback({ kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx })
                     allowSendRows = true
                 } else if (conn.optionsBatch.receiveTables === 'directly') {
-                    callback({kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx})
+                    callback({ kind: 'columns', columns: requestStep.columns, queryIdx: currentQuery.queryIdx })
                 } else {
                     if (!currentQuery.tables) currentQuery.tables = []
                     currentRows = []
-                    currentQuery.tables.push({queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows})
+                    currentQuery.tables.push({ queryIdx: currentQuery.queryIdx, columns: requestStep.columns, rows: currentRows })
                 }
             } else if (requestStep.kind === 'row') {
                 if (conn.optionsBatch.receiveTables === 'directly') {
-                    callback({kind: 'rows', rows: [requestStep.row]})
+                    callback({ kind: 'rows', rows: [requestStep.row] })
                 } else {
                     currentRows.push(requestStep.row)
                 }
@@ -168,7 +168,7 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                 if (conn.receiveTablesMsec > 0) {
                     allowSendRows = false
                     if (currentRows && currentRows.length > 0) {
-                        callback({kind: 'rows', rows: currentRows})
+                        callback({ kind: 'rows', rows: currentRows })
                         currentRows = []
                     }
                 }
@@ -203,11 +203,11 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
                         if (!currentQuery.messages) currentQuery.messages = []
                         currentQuery.messages.push(message)
                     } else if (conn.optionsBatch.receiveMessage === 'directly') {
-                        callback({kind: 'message', message: message})
+                        callback({ kind: 'message', message: message })
                     }
                 }
 
-                const durations = q.filter(f => f.duration).map(m => { return {queryIdx: m.queryIdx, value: Math.round(m.duration)} })
+                const durations = q.filter(f => f.duration).map(m => { return { queryIdx: m.queryIdx, value: Math.round(m.duration) } })
                 let totalDurations = 0
                 durations.forEach(d => { totalDurations = totalDurations + d.value })
 
@@ -232,11 +232,11 @@ export function Exec(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions, 
 
 function request(connection: Connection, optionsBatch: TBatchOptions, queries: TQuery[], idx: number, callback: (requestStep: TRequest) => void) {
     if (idx >= queries.length) {
-        callback({kind: 'stop'})
+        callback({ kind: 'stop' })
         return
     }
     const query = queries[idx]
-    callback({kind: 'before.exec', query: query})
+    callback({ kind: 'before.exec', query: query })
     const perfStart = performance.now()
     let req = new Request(query.script, error => {
         req.removeAllListeners()
@@ -245,10 +245,10 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
         query.isExecuted = true
         if (error) {
             query.error = error
-            callback({kind: 'stop'})
+            callback({ kind: 'stop' })
             return
         }
-        callback({kind: 'after.exec', query: query})
+        callback({ kind: 'after.exec', query: query })
         idx++
         request(connection, optionsBatch, queries, idx, callback)
     })
@@ -256,27 +256,27 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
     let generaforRow = Function(`return undefined`)
 
     if (query.kind === 'spid') {
-        req.on('row', function(row) {
+        req.on('row', function (row) {
             if (row && row.length > 0 && row[0].value) {
-                const spid = vv.toInt(row[0].value)
-                callback({kind: 'spid', spid: spid})
+                const spid = toInt(row[0].value)
+                callback({ kind: 'spid', spid: spid })
             }
         })
     } else if (optionsBatch.receiveTables !== 'none') {
-        req.on('columnMetadata', function(columnsRaw) {
+        req.on('columnMetadata', function (columnsRaw) {
             const columns = ec.ColumnsBuild(columnsRaw)
             ec.ColumnsNameNormalize(columns)
 
             generaforRow = ec.GenerateFunctionConvertRow(optionsBatch.formatCells, columns)
-            callback({kind: 'columns', columns: columns.map(m => { return m.column })})
+            callback({ kind: 'columns', columns: columns.map(m => { return m.column }) })
         })
         if (optionsBatch.formatCells === 'native') {
-            req.on('row', function(row) {
-                callback({kind: 'row', row: generaforRow(row)})
+            req.on('row', function (row) {
+                callback({ kind: 'row', row: generaforRow(row) })
             })
         } else if (optionsBatch.formatCells === 'string') {
-            req.on('row', function(row) {
-                callback({kind: 'row', row: generaforRow(row, formatDate)})
+            req.on('row', function (row) {
+                callback({ kind: 'row', row: generaforRow(row, formatDate) })
             })
         }
     }
@@ -296,5 +296,5 @@ function request(connection: Connection, optionsBatch: TBatchOptions, queries: T
 function formatDate(d: Date): string {
     //const s = dateFormatter.format(d)
     //return `${s.substring(0, 10)}T${s.substring(12,24)}`
-    return vv.dateFormat(d, '126')
+    return dateFormat(d, '126')
 }

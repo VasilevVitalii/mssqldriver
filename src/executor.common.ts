@@ -1,11 +1,11 @@
 import { ConnectionConfig, Connection, ColumnMetaData } from 'tedious'
-import * as vv from 'vv-common'
+import { isEmpty, equal } from 'vv-common'
 import * as mssqlcoop from 'mssqlcoop'
 import { TBatchOptions, TQuery, TColumn } from './executor'
 
-export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions) : {connection: Connection, optionsBatch: TBatchOptions, receiveTablesMsec: number} {
+export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBatchOptions): { connection: Connection, optionsBatch: TBatchOptions, receiveTablesMsec: number } {
     const database = optionsBatch?.database || optionsTds.options.database
-    const lock = optionsBatch && optionsBatch.lock ? {...optionsBatch.lock} : undefined
+    const lock = optionsBatch && optionsBatch.lock ? { ...optionsBatch.lock } : undefined
     if (lock) {
         lock.key = lock.key || 'UNKNOWN_LOCK'
         lock.database = lock.database || database
@@ -17,7 +17,7 @@ export function BuildConnection(optionsTds: ConnectionConfig, optionsBatch: TBat
     const receiveTablesMsec = typeof receiveTables === 'number' ? (receiveTables > 0 ? receiveTables : 100) : undefined
 
     return {
-        connection: new Connection({...optionsTds, options: {...optionsTds.options, database: database}}),
+        connection: new Connection({ ...optionsTds, options: { ...optionsTds.options, database: database } }),
         optionsBatch: {
             database: database,
             receiveTables: receiveTables,
@@ -36,15 +36,15 @@ export function BuildQueries(optionsBatch: TBatchOptions, query: string | string
     const bot = [] as TQuery[]
 
     if (optionsBatch?.hasSpid === true) {
-        top.push({kind: 'spid', script: 'SELECT @@SPID spid', queryIdx: undefined})
+        top.push({ kind: 'spid', script: 'SELECT @@SPID spid', queryIdx: undefined })
     }
     if (optionsBatch?.lock) {
-        top.push({kind: 'lock.on', script: mssqlcoop.HelperLockSessionOn(optionsBatch.lock.key, optionsBatch.lock.database, optionsBatch.lock.wait), queryIdx: undefined})
-        bot.unshift({kind: 'lock.off', script: mssqlcoop.HelperLockSessionOff(optionsBatch.lock.key, optionsBatch.lock.database), queryIdx: undefined})
+        top.push({ kind: 'lock.on', script: mssqlcoop.HelperLockSessionOn(optionsBatch.lock.key, optionsBatch.lock.database, optionsBatch.lock.wait), queryIdx: undefined })
+        bot.unshift({ kind: 'lock.off', script: mssqlcoop.HelperLockSessionOff(optionsBatch.lock.key, optionsBatch.lock.database), queryIdx: undefined })
     }
     const sripts = !Array.isArray(query) ? [query] : query
-    sripts.filter(f => !vv.isEmpty(f)).forEach((q, i) => {
-        mid.push({kind: 'query', script: q, queryIdx: i})
+    sripts.filter(f => !isEmpty(f)).forEach((q, i) => {
+        mid.push({ kind: 'query', script: q, queryIdx: i })
     })
     return [...top, ...mid, ...bot]
 }
@@ -80,7 +80,7 @@ export function ColumnMetadatTypeToKnownType(meta: ColumnMetaData): mssqlcoop.TT
     return fnd || mssqlcoop.Types[0]
 }
 
-export function ColumnsBuild(columnsRaw: ColumnMetaData[]) : {typeColumn: mssqlcoop.TType, column: TColumn}[] {
+export function ColumnsBuild(columnsRaw: ColumnMetaData[]): { typeColumn: mssqlcoop.TType, column: TColumn }[] {
     const columns = columnsRaw.map(m => {
         const flags = m['flags']
         const typeColumn = ColumnMetadatTypeToKnownType(m)
@@ -90,7 +90,7 @@ export function ColumnsBuild(columnsRaw: ColumnMetaData[]) : {typeColumn: mssqlc
         }
         return {
             typeColumn: typeColumn,
-            column : {
+            column: {
                 name: m.colName,
                 type: typeColumn.name,
                 precision: m.precision,
@@ -106,14 +106,14 @@ export function ColumnsBuild(columnsRaw: ColumnMetaData[]) : {typeColumn: mssqlc
     return columns
 }
 
-export function ColumnsNameNormalize(columns: {typeColumn: mssqlcoop.TType, column: TColumn}[]) {
-    columns.filter(f => vv.isEmpty(f.column.name)).forEach(c => { c.column.name = 'noname' })
+export function ColumnsNameNormalize(columns: { typeColumn: mssqlcoop.TType, column: TColumn }[]) {
+    columns.filter(f => isEmpty(f.column.name)).forEach(c => { c.column.name = 'noname' })
     let idxCopy = 1
     for (let i = 0; i < columns.length; i++) {
         for (let j = i + 1; j < columns.length; j++) {
             if (columns[i].column.name.toLowerCase() !== columns[j].column.name.toLowerCase()) continue
             let maybeName = `${columns[i].column.name}_copy_${idxCopy}`
-            while (columns.some(f => vv.equal(f.column.name, maybeName))) {
+            while (columns.some(f => equal(f.column.name, maybeName))) {
                 idxCopy++
                 maybeName = `${columns[i].column.name}_copy_${idxCopy}`
             }
@@ -123,7 +123,7 @@ export function ColumnsNameNormalize(columns: {typeColumn: mssqlcoop.TType, colu
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export function GenerateFunctionConvertRow(formatCells: ('native' | 'string'), columns: {typeColumn: mssqlcoop.TType, column: TColumn}[]): Function {
+export function GenerateFunctionConvertRow(formatCells: ('native' | 'string'), columns: { typeColumn: mssqlcoop.TType, column: TColumn }[]): Function {
     const getRowFunctionBody = [] as string[]
     if (formatCells === 'native') {
         columns.forEach((c, i) => {
@@ -133,7 +133,7 @@ export function GenerateFunctionConvertRow(formatCells: ('native' | 'string'), c
                 getRowFunctionBody.push(`${c.column.name}:row[${i}].value === null ? undefined : row[${i}].value`)
             }
         })
-        return Function('row',`return { ${getRowFunctionBody.join(',')} }`)
+        return Function('row', `return { ${getRowFunctionBody.join(',')} }`)
     }
     if (formatCells === 'string') {
         columns.forEach((c, i) => {

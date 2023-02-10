@@ -45,7 +45,7 @@ export function Create(options: TConnection): IApp {
             Exec(optTds, options, query, callback)
         },
         ping(callback: (error: Error, info: TServerInfo) => void) {
-            Exec(optTds, {receiveMessage: 'none'}, mssqlcoop.SchemataServer.Info(), execResult => {
+            Exec(optTds, {receiveMessage: 'none'}, mssqlcoop.SchemataServer(), execResult => {
                 if (execResult.kind !== 'finish') return
                 if (execResult.finish.error) {
                     callback(execResult.finish.error, undefined)
